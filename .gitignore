@@ -1,0 +1,14 @@
+# 构建产物
+bin/
+obj/
+
+# 本地发布包
+dist/
+*.zip
+
+# IDE / 用户设置
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
