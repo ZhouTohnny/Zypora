@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
@@ -227,7 +228,17 @@ public partial class MainWindow : Window
         var name = _currentFile == null ? "未命名" : Path.GetFileName(_currentFile);
         var star = _dirty ? "*" : "";
         var mode = _mode == ViewMode.Preview ? "预览" : "原生";
-        Title = $"{star}{name} - Zypora ({mode})";
+        Title = $"{star}{name} - Zypora{VersionSuffix} ({mode})";
+    }
+
+    private static string VersionSuffix
+    {
+        get
+        {
+            var v = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            return string.IsNullOrEmpty(v) ? "" : " v" + v;
+        }
     }
 
     private void ToggleInline(string marker, bool requireSelection = false)
