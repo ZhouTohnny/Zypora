@@ -45,6 +45,25 @@
                 <Button Content="引用" Style="{StaticResource ToolbarButton}" Click="OnQuote" ToolTip="引用 (Ctrl+Shift+O)"/>
                 <Button Content="代码" Style="{StaticResource ToolbarButton}" Click="OnCode" ToolTip="行内代码 (Ctrl+K)"/>
                 <Button Content="代码块" Style="{StaticResource ToolbarButton}" Click="OnCodeBlock" ToolTip="代码块 (Ctrl+Shift+K)"/>
+                <Button Content="表格" Style="{StaticResource ToolbarButton}" Click="OnInsertTable" ToolTip="插入表格 (Ctrl+Shift+T)"/>
+            </StackPanel>
+        </Border>
+
+        <Border x:Name="FindBar" DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Margin="6,4">
+                <TextBox x:Name="FindBox" Width="200" VerticalContentAlignment="Center" Padding="4,3"
+                         TextChanged="OnFindTextChanged" KeyDown="OnFindKeyDown"/>
+                <TextBox x:Name="ReplaceBox" Width="180" Margin="6,0,0,0" VerticalContentAlignment="Center" Padding="4,3"
+                         Visibility="Collapsed" KeyDown="OnReplaceKeyDown"/>
+                <CheckBox x:Name="CaseBox" Content="Aa" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
+                <CheckBox x:Name="WholeWordBox" Content="全词" Margin="6,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
+                <CheckBox x:Name="RegexBox" Content=".*" Margin="6,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
+                <Button Content="上一个" Style="{StaticResource ToolbarButton}" Click="OnFindPrev"/>
+                <Button Content="下一个" Style="{StaticResource ToolbarButton}" Click="OnFindNext"/>
+                <Button x:Name="ReplaceButton" Content="替换" Style="{StaticResource ToolbarButton}" Visibility="Collapsed" Click="OnReplace"/>
+                <Button x:Name="ReplaceAllButton" Content="全部替换" Style="{StaticResource ToolbarButton}" Visibility="Collapsed" Click="OnReplaceAll"/>
+                <TextBlock x:Name="MatchLabel" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#666666"/>
+                <Button Content="✕" Style="{StaticResource ToolbarButton}" Click="OnFindClose"/>
             </StackPanel>
         </Border>
 
