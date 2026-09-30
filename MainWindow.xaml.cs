@@ -237,7 +237,7 @@ public partial class MainWindow : Window
         {
             var v = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            return string.IsNullOrEmpty(v) ? "" : " v" + v;
+            return AppInfo.VersionSuffix(v);
         }
     }
 
@@ -440,11 +440,18 @@ public partial class MainWindow : Window
             Filter = "Markdown 文件 (*.md)|*.md|所有文件 (*.*)|*.*",
         };
         if (dlg.ShowDialog() != true) return;
+        LoadFile(dlg.FileName);
+    }
 
+    // 从路径加载(供"打开"对话框、右键"打开方式"、命令行共用)
+    public void OpenFile(string path) => LoadFile(path);
+
+    private void LoadFile(string path)
+    {
         try
         {
-            var text = File.ReadAllText(dlg.FileName);
-            _currentFile = dlg.FileName;
+            var text = File.ReadAllText(path);
+            _currentFile = path;
             _renderTimer.Stop();
             _groupTimer.Stop();
             SetDocument(BuildForMode(text));
@@ -456,7 +463,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show("打开失败:\n" + ex.Message, "Zypora", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowError("打开失败", ex);
         }
     }
 
