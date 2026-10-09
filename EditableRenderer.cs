@@ -13,21 +13,9 @@ public static class EditableRenderer
     private static readonly string Mono = "Consolas";
     private static readonly string Body = "Microsoft YaHei UI";
 
-    private static readonly Brush Faint = new SolidColorBrush(Color.FromRgb(0xB8, 0xB8, 0xB8));
-    private static readonly Brush Text = new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28));
-    private static readonly Brush CodeBg = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0));
-    private static readonly Brush CodeFg = new SolidColorBrush(Color.FromRgb(0xC8, 0x28, 0x28));
-    private static readonly Brush QuoteLine = new SolidColorBrush(Color.FromRgb(0x15, 0x65, 0xC0));
-    private static readonly Brush RuleLine = new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD0));
-    private static readonly Brush GridLine = new SolidColorBrush(Color.FromRgb(0xD5, 0xD5, 0xD5));
-    private static readonly Brush GridLineStrong = new SolidColorBrush(Color.FromRgb(0xA8, 0xA8, 0xA8));
-    private static readonly Brush PlaceholderBg = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
-    private static readonly Brush HeadingFg = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-    private static readonly Brush QuoteFg = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
-
-    private static readonly Regex BoldRegex = new Regex(@"(\*\*|__)(.+?)(\*\*|__)", RegexOptions.Compiled);
-    private static readonly Regex ItalicRegex = new Regex(@"(?<!\*)(\*|_)(?!\*)(.+?)(\*|_)", RegexOptions.Compiled);
-    private static readonly Regex CodeRegex = new Regex(@"(`[^`]+`)", RegexOptions.Compiled);
+    private static readonly Regex BoldRegex = new(@"(\*\*|__)(.+?)(\*\*|__)", RegexOptions.Compiled);
+    private static readonly Regex ItalicRegex = new(@"(?<!\*)(\*|_)(?!\*)(.+?)(\*|_)", RegexOptions.Compiled);
+    private static readonly Regex CodeRegex = new(@"(`[^`]+`)", RegexOptions.Compiled);
 
     public static string ReadSource(FlowDocument doc)
     {
@@ -39,19 +27,20 @@ public static class EditableRenderer
         return text;
     }
 
-    public static FlowDocument Build(string markdown) => Build(markdown, preview: false, docDir: null, appDir: null);
+    public static FlowDocument Build(string markdown) => Build(markdown, preview: false, docDir: null, appDir: null, RenderTheme.Light);
 
-    public static FlowDocument BuildPreview(string markdown, string? docDir = null, string? appDir = null)
-        => Build(markdown, preview: true, docDir, appDir);
+    public static FlowDocument BuildPreview(string markdown, string? docDir = null, string? appDir = null, RenderTheme? theme = null)
+        => Build(markdown, preview: true, docDir, appDir, theme ?? RenderTheme.Light);
 
-    public static FlowDocument BuildRaw(string markdown)
+    public static FlowDocument BuildRaw(string markdown, RenderTheme? theme = null)
     {
+        var t = theme ?? RenderTheme.Light;
         var doc = new FlowDocument
         {
             FontFamily = new FontFamily(Mono),
             FontSize = 14,
             PagePadding = new Thickness(40, 28, 40, 40),
-            Foreground = Text,
+            Foreground = t.Text,
         };
 
         if (string.IsNullOrEmpty(markdown))
@@ -71,32 +60,31 @@ public static class EditableRenderer
         return doc;
     }
 
-
-    private static Run Marker(string text, bool preview) =>
+    private static Run Marker(string text, bool preview, RenderTheme t) =>
         preview
             ? new Run(text) { Foreground = Brushes.Transparent, FontSize = 1 }
-            : new Run(text) { Foreground = Faint };
+            : new Run(text) { Foreground = t.Faint };
 
-    private static InlineUIContainer CreateBullet()
+    private static InlineUIContainer CreateBullet(RenderTheme t)
     {
         var dot = new System.Windows.Shapes.Ellipse
         {
             Width = 6,
             Height = 6,
-            Fill = Brushes.Black,
+            Fill = t.Bullet,
             Margin = new Thickness(0, 0, 7, 0),
         };
         return new InlineUIContainer(dot) { BaselineAlignment = BaselineAlignment.Center };
     }
 
-    private static FlowDocument Build(string markdown, bool preview, string? docDir, string? appDir)
+    private static FlowDocument Build(string markdown, bool preview, string? docDir, string? appDir, RenderTheme theme)
     {
         var doc = new FlowDocument
         {
             FontFamily = new FontFamily(Body),
             FontSize = 16,
             PagePadding = new Thickness(40, 28, 40, 40),
-            Foreground = Text,
+            Foreground = theme.Text,
         };
 
         if (string.IsNullOrEmpty(markdown))
@@ -119,7 +107,7 @@ public static class EditableRenderer
             {
                 if (trimmed.StartsWith("```") || trimmed.StartsWith("~~~"))
                 {
-                    FlushCode(doc, fenceOpen, codeLines, line, preview);
+                    FlushCode(doc, fenceOpen, codeLines, line, preview, theme);
                     inFence = false;
                 }
                 else
@@ -139,7 +127,7 @@ public static class EditableRenderer
 
             if (preview && TableParser.TryParse(lines, i, out var table, out var tableEnd))
             {
-                AppendTable(doc, lines, i, tableEnd, table, preview, docDir, appDir);
+                AppendTable(doc, lines, i, tableEnd, table, preview, docDir, appDir, theme);
                 i = tableEnd - 1;
                 continue;
             }
@@ -150,47 +138,47 @@ public static class EditableRenderer
                 continue;
             }
 
-            doc.Blocks.Add(BuildLine(line, trimmed, preview, docDir, appDir));
+            doc.Blocks.Add(BuildLine(line, trimmed, preview, docDir, appDir, theme));
         }
 
         if (inFence)
         {
-            FlushCode(doc, fenceOpen, codeLines, null, preview);
+            FlushCode(doc, fenceOpen, codeLines, null, preview, theme);
         }
 
         return doc;
     }
 
-    private static void FlushCode(FlowDocument doc, string openLine, List<string> codeLines, string? closeLine, bool preview)
+    private static void FlushCode(FlowDocument doc, string openLine, List<string> codeLines, string? closeLine, bool preview, RenderTheme t)
     {
-        // 围栏段落:预览下标记不可见,故用极小字号避免多出一条空行,仅靠内边距撑出代码块上下边缘
         double fenceSize = preview ? 1 : 14;
-        doc.Blocks.Add(CodeParagraph(openLine, Marker(openLine, preview), new Thickness(12, preview ? 4 : 8, 12, 0), new Thickness(0, 6, 0, 0), fenceSize));
+        doc.Blocks.Add(CodeParagraph(openLine, Marker(openLine, preview, t), new Thickness(12, preview ? 4 : 8, 12, 0), new Thickness(0, 6, 0, 0), fenceSize, t));
 
         for (int i = 0; i < codeLines.Count; i++)
         {
             bool last = i == codeLines.Count - 1 && closeLine == null;
             doc.Blocks.Add(CodeParagraph(
                 codeLines[i],
-                new Run(codeLines[i]) { Foreground = CodeFg },
+                new Run(codeLines[i]) { Foreground = t.CodeFg },
                 new Thickness(12, 0, 12, last ? (preview ? 4 : 8) : 0),
                 new Thickness(0, 0, 0, last && !preview ? 6 : 0),
-                14));
+                14,
+                t));
         }
 
         if (closeLine != null)
         {
-            doc.Blocks.Add(CodeParagraph(closeLine, Marker(closeLine, preview), new Thickness(12, 0, 12, preview ? 4 : 8), new Thickness(0, 0, 0, 6), fenceSize));
+            doc.Blocks.Add(CodeParagraph(closeLine, Marker(closeLine, preview, t), new Thickness(12, 0, 12, preview ? 4 : 8), new Thickness(0, 0, 0, 6), fenceSize, t));
         }
     }
 
-    private static Paragraph CodeParagraph(string _, Inline content, Thickness padding, Thickness margin, double fontSize)
+    private static Paragraph CodeParagraph(string _, Inline content, Thickness padding, Thickness margin, double fontSize, RenderTheme t)
     {
         var p = new Paragraph
         {
             FontFamily = new FontFamily(Mono),
             FontSize = fontSize,
-            Background = CodeBg,
+            Background = t.CodeBg,
             Padding = padding,
             Margin = margin,
         };
@@ -198,7 +186,7 @@ public static class EditableRenderer
         return p;
     }
 
-    private static Block BuildLine(string line, string trimmed, bool preview, string? docDir, string? appDir)
+    private static Block BuildLine(string line, string trimmed, bool preview, string? docDir, string? appDir, RenderTheme t)
     {
         // 图片行(整行是 ![alt](src) 且含空格):隐藏文本 + 容器保持逐字恒等
         if (preview && line.Contains(' ') && ImageSupport.TryParseImageLine(trimmed, out _, out var imgSrc))
@@ -206,7 +194,7 @@ public static class EditableRenderer
             int lastSpace = line.LastIndexOf(' ');
             var ip = new Paragraph { Margin = new Thickness(0, 4, 0, 4) };
             ip.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 1 });
-            ip.Inlines.Add(new InlineUIContainer(BuildImageVisual(imgSrc, docDir, appDir)) { BaselineAlignment = BaselineAlignment.Center });
+            ip.Inlines.Add(new InlineUIContainer(BuildImageVisual(imgSrc, docDir, appDir, t)) { BaselineAlignment = BaselineAlignment.Center });
             ip.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
             return ip;
         }
@@ -230,34 +218,32 @@ public static class EditableRenderer
             var content = trimmed.Substring(markerLen);
             p.FontSize = size;
             p.FontWeight = FontWeights.SemiBold;
-            p.Foreground = HeadingFg;
-            p.Inlines.Add(Marker(marker, preview));
-            AppendInlineMarkdown(p, content, preview);
+            p.Foreground = t.HeadingFg;
+            p.Inlines.Add(Marker(marker, preview, t));
+            AppendInlineMarkdown(p, content, preview, t);
             return p;
         }
 
         // Quote
         if (trimmed.StartsWith(">"))
         {
-            p.BorderBrush = QuoteLine;
+            p.BorderBrush = t.QuoteLine;
             p.BorderThickness = new Thickness(3, 0, 0, 0);
             p.Padding = new Thickness(12, 4, 0, 4);
-            p.Foreground = QuoteFg;
-            p.Inlines.Add(Marker(">", preview));
-            AppendInlineMarkdown(p, trimmed.Substring(1), preview);
+            p.Foreground = t.QuoteFg;
+            p.Inlines.Add(Marker(">", preview, t));
+            AppendInlineMarkdown(p, trimmed.Substring(1), preview, t);
             return p;
         }
 
-        // Unordered list:实心小黑圆点
+        // Unordered list:实心圆点
         var ul = Regex.Match(trimmed, @"^[-*+]\s+");
         if (ul.Success)
         {
             var marker = trimmed.Substring(0, ul.Groups[0].Value.Length);
-            // InlineUIContainer 在 TextRange 中占 1 个空格,故隐藏标记少渲染最后一个空格,
-            // 使文本总长与源码完全一致,保证光标映射与保存不损坏源码。
             p.Inlines.Add(new Run(marker.Substring(0, marker.Length - 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
-            p.Inlines.Add(CreateBullet());
-            AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview);
+            p.Inlines.Add(CreateBullet(t));
+            AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview, t);
             return p;
         }
 
@@ -266,8 +252,8 @@ public static class EditableRenderer
         if (ol.Success)
         {
             var marker = trimmed.Substring(0, ol.Groups[0].Value.Length);
-            p.Inlines.Add(preview ? new Run(marker) { Foreground = QuoteLine } : Marker(marker, false));
-            AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview);
+            p.Inlines.Add(preview ? new Run(marker) { Foreground = t.QuoteLine } : Marker(marker, false, t));
+            AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview, t);
             return p;
         }
 
@@ -275,29 +261,29 @@ public static class EditableRenderer
         if (Regex.IsMatch(trimmed, @"^(-{3,}|\*{3,}|_{3,})$"))
         {
             p.Margin = new Thickness(0, 10, 0, 10);
-            p.Inlines.Add(Marker(trimmed, preview));
+            p.Inlines.Add(Marker(trimmed, preview, t));
             if (preview)
             {
-                p.BorderBrush = RuleLine;
+                p.BorderBrush = t.RuleLine;
                 p.BorderThickness = new Thickness(0, 0, 0, 1);
             }
             return p;
         }
 
         // Normal paragraph
-        AppendInlineMarkdown(p, trimmed, preview);
+        AppendInlineMarkdown(p, trimmed, preview, t);
         return p;
     }
 
-    private static void AppendInlineMarkdown(Paragraph p, string text, bool preview)
+    private static void AppendInlineMarkdown(Paragraph p, string text, bool preview, RenderTheme t)
     {
-        foreach (var inline in ParseInlines(text, preview))
+        foreach (var inline in ParseInlines(text, preview, t))
         {
             p.Inlines.Add(inline);
         }
     }
 
-    private static List<Inline> ParseInlines(string text, bool preview)
+    private static List<Inline> ParseInlines(string text, bool preview, RenderTheme t)
     {
         var result = new List<Inline>();
         int pos = 0;
@@ -325,22 +311,22 @@ public static class EditableRenderer
 
             if (next == bold)
             {
-                result.Add(Marker(bold.Groups[1].Value, preview));
+                result.Add(Marker(bold.Groups[1].Value, preview, t));
                 result.Add(new Run(bold.Groups[2].Value) { FontWeight = FontWeights.Bold });
-                result.Add(Marker(bold.Groups[3].Value, preview));
+                result.Add(Marker(bold.Groups[3].Value, preview, t));
             }
             else if (next == code)
             {
                 var content = code.Groups[1].Value.Trim('`');
-                result.Add(Marker("`", preview));
-                result.Add(new Run(content) { FontFamily = new FontFamily(Mono), Background = CodeBg, Foreground = CodeFg });
-                result.Add(Marker("`", preview));
+                result.Add(Marker("`", preview, t));
+                result.Add(new Run(content) { FontFamily = new FontFamily(Mono), Background = t.CodeBg, Foreground = t.CodeFg });
+                result.Add(Marker("`", preview, t));
             }
             else // italic
             {
-                result.Add(Marker(italic.Groups[1].Value, preview));
+                result.Add(Marker(italic.Groups[1].Value, preview, t));
                 result.Add(new Run(italic.Groups[2].Value) { FontStyle = FontStyles.Italic });
-                result.Add(Marker(italic.Groups[3].Value, preview));
+                result.Add(Marker(italic.Groups[3].Value, preview, t));
             }
 
             pos = next.Index + next.Length;
@@ -350,7 +336,7 @@ public static class EditableRenderer
 
     // ---- 表格 ----
 
-    private static void AppendTable(FlowDocument doc, string[] lines, int start, int end, TableModel model, bool preview, string? docDir, string? appDir)
+    private static void AppendTable(FlowDocument doc, string[] lines, int start, int end, TableModel model, bool preview, string? docDir, string? appDir, RenderTheme t)
     {
         int cols = model.ColumnCount;
         var widths = new double[cols];
@@ -368,7 +354,6 @@ public static class EditableRenderer
         {
             var line = lines[k];
 
-            // 分隔行:整行隐藏,不产生可视件(表头下边框充当分隔线)
             if (TableParser.IsSeparatorLine(line))
             {
                 var sep = new Paragraph { Margin = new Thickness(0) };
@@ -380,18 +365,15 @@ public static class EditableRenderer
             int lastSpace = line.LastIndexOf(' ');
             if (lastSpace < 0)
             {
-                // 无空格的紧凑行:回退为普通段落(可见、可编辑)
-                doc.Blocks.Add(BuildLine(line, line.TrimStart(), preview, docDir, appDir));
+                doc.Blocks.Add(BuildLine(line, line.TrimStart(), preview, docDir, appDir, t));
                 continue;
             }
 
             bool header = k == start;
             var cells = TableParser.SplitCells(line);
-            var visual = BuildRowVisual(model, cells, widths, header);
+            var visual = BuildRowVisual(model, cells, widths, header, t);
 
             var p = new Paragraph { Margin = new Thickness(0) };
-            // 容器在 TextRange 中恰占 1 个空格,故把该行按最后一个空格拆开:
-            // [隐藏前段] + [容器] + [隐藏后段] 的文本总长与源码完全一致。
             p.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 1 });
             p.Inlines.Add(new InlineUIContainer(visual) { BaselineAlignment = BaselineAlignment.Top });
             p.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
@@ -399,7 +381,7 @@ public static class EditableRenderer
         }
     }
 
-    private static FrameworkElement BuildRowVisual(TableModel model, IReadOnlyList<string> cells, double[] widths, bool header)
+    private static FrameworkElement BuildRowVisual(TableModel model, IReadOnlyList<string> cells, double[] widths, bool header, RenderTheme t)
     {
         var grid = new Grid();
         for (int c = 0; c < widths.Length; c++)
@@ -416,16 +398,16 @@ public static class EditableRenderer
                 TextAlignment = AlignToTextAlignment(model.Align[c]),
                 FontWeight = header ? FontWeights.Bold : FontWeights.Normal,
                 FontSize = 15,
-                Foreground = Text,
+                Foreground = t.Text,
             };
-            foreach (var inline in ParseInlines(text, preview: true))
+            foreach (var inline in ParseInlines(text, preview: true, t))
             {
                 tb.Inlines.Add(inline);
             }
 
             var border = new Border
             {
-                BorderBrush = header ? GridLineStrong : GridLine,
+                BorderBrush = header ? t.GridLineStrong : t.GridLine,
                 BorderThickness = header ? new Thickness(0, 0, 1, 2) : new Thickness(0, 0, 1, 1),
                 Padding = new Thickness(8, 4, 8, 4),
                 Child = tb,
@@ -436,13 +418,13 @@ public static class EditableRenderer
 
         return new Border
         {
-            BorderBrush = GridLine,
+            BorderBrush = t.GridLine,
             BorderThickness = new Thickness(1, 1, 0, 0),
             Child = grid,
         };
     }
 
-    private static FrameworkElement BuildImageVisual(string src, string? docDir, string? appDir)
+    private static FrameworkElement BuildImageVisual(string src, string? docDir, string? appDir, RenderTheme t)
     {
         var resolved = ImageSupport.ResolveImagePath(src, docDir, appDir);
         if (!ImageSupport.IsRemote(resolved) && File.Exists(resolved))
@@ -470,14 +452,14 @@ public static class EditableRenderer
 
         return new Border
         {
-            Background = PlaceholderBg,
-            BorderBrush = GridLine,
+            Background = t.PlaceholderBg,
+            BorderBrush = t.GridLine,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(10, 6, 10, 6),
             Child = new TextBlock
             {
                 Text = src,
-                Foreground = QuoteFg,
+                Foreground = t.QuoteFg,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 600,

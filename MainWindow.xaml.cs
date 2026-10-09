@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private bool _rendering;
 
     private AppSettings _settings = new();
+    private bool _dark;
 
     private readonly List<(int Start, int Length)> _matches = new();
     private int _matchIndex = -1;
@@ -81,7 +82,9 @@ public partial class MainWindow : Window
         UpdateChrome();
 
         _settings = SettingsStore.Load(SettingsStore.DefaultDir);
-        ApplyBackground();
+        _dark = _settings.DarkMode;
+        DarkButton.IsChecked = _dark;
+        ApplyTheme();
     }
 
     private string GetSourceText() => EditableRenderer.ReadSource(Editor.Document);
@@ -139,11 +142,15 @@ public partial class MainWindow : Window
         }));
     }
 
-    private FlowDocument BuildForMode(string source) => _mode switch
+    private FlowDocument BuildForMode(string source)
     {
-        ViewMode.Raw => EditableRenderer.BuildRaw(source),
-        _ => EditableRenderer.BuildPreview(source, DocDir, AppContext.BaseDirectory),
-    };
+        var theme = _dark ? RenderTheme.Dark : RenderTheme.Light;
+        return _mode switch
+        {
+            ViewMode.Raw => EditableRenderer.BuildRaw(source, theme),
+            _ => EditableRenderer.BuildPreview(source, DocDir, AppContext.BaseDirectory, theme),
+        };
+    }
 
     private string? DocDir => _currentFile == null ? null : Path.GetDirectoryName(_currentFile);
 
@@ -392,42 +399,49 @@ public partial class MainWindow : Window
         cm.IsOpen = true;
     }
 
-    private void OnSettings(object sender, RoutedEventArgs e)
+    private void OnToggleDark(object sender, RoutedEventArgs e)
     {
-        var w = new SettingsWindow(_settings, SettingsStore.DefaultDir) { Owner = this };
-        if (w.ShowDialog() == true)
-        {
-            _settings = w.Result;
-            SettingsStore.Save(SettingsStore.DefaultDir, _settings);
-            ApplyBackground();
-        }
+        _dark = DarkButton.IsChecked == true;
+        ApplyTheme();
+        SettingsStore.Save(SettingsStore.DefaultDir, new AppSettings { DarkMode = _dark });
     }
 
-    private void ApplyBackground()
+    private void ApplyTheme()
     {
-        var path = _settings.BackgroundImagePath;
-        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        var res = Resources;
+        if (_dark)
         {
-            try
-            {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(path);
-                bmp.EndInit();
-                Editor.Background = new ImageBrush(bmp)
-                {
-                    Stretch = Stretch.UniformToFill,
-                    Opacity = Math.Clamp(_settings.BackgroundOpacity, 0, 1),
-                };
-                return;
-            }
-            catch
-            {
-                // 加载失败 → 回退白底
-            }
+            res["Br.WindowBg"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+            res["Br.PanelBg"] = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26));
+            res["Br.FindBg"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2B));
+            res["Br.PanelBorder"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A));
+            res["Br.Fg"] = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+            res["Br.Muted"] = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0));
+            res["Br.Hover"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A));
+            res["Br.Checked"] = new SolidColorBrush(Color.FromRgb(0x2F, 0x4A, 0x6E));
+            res["Br.CheckedFg"] = new SolidColorBrush(Color.FromRgb(0x9C, 0xC7, 0xFF));
         }
-        Editor.Background = Brushes.White;
+        else
+        {
+            res["Br.WindowBg"] = new SolidColorBrush(Color.FromRgb(0xF4, 0xF4, 0xF4));
+            res["Br.PanelBg"] = Brushes.White;
+            res["Br.FindBg"] = new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFA));
+            res["Br.PanelBorder"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+            res["Br.Fg"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+            res["Br.Muted"] = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
+            res["Br.Hover"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+            res["Br.Checked"] = new SolidColorBrush(Color.FromRgb(0xCF, 0xE3, 0xFF));
+            res["Br.CheckedFg"] = new SolidColorBrush(Color.FromRgb(0x15, 0x65, 0xC0));
+        }
+
+        Editor.Background = _dark ? new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)) : Brushes.White;
+        Editor.CaretBrush = _dark ? Brushes.White : Brushes.Black;
+
+        // 用新主题重建文档
+        var source = GetSourceText();
+        int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+        SetDocument(BuildForMode(source));
+        Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, source.Length));
     }
 
     // ---- File / export ----

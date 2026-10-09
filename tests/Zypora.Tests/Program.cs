@@ -735,26 +735,43 @@ internal static class SettingsTests
         var dir = Path.Combine(Path.GetTempPath(), "zypora-settings-" + Guid.NewGuid().ToString("N"));
 
         var def = SettingsStore.Load(dir);
-        T.Eq("settings default opacity", 0.3, def.BackgroundOpacity);
-        T.Ok("settings default no image", def.BackgroundImagePath == null);
+        T.Ok("settings default light", !def.DarkMode);
 
-        SettingsStore.Save(dir, new AppSettings { BackgroundImagePath = "C:/x.png", BackgroundOpacity = 0.55 });
+        SettingsStore.Save(dir, new AppSettings { DarkMode = true });
         var loaded = SettingsStore.Load(dir);
-        T.Eq("settings reload opacity", 0.55, loaded.BackgroundOpacity);
-        T.Eq("settings reload path", "C:/x.png", loaded.BackgroundImagePath);
+        T.Ok("settings reload dark", loaded.DarkMode);
 
         File.WriteAllText(Path.Combine(dir, "settings.json"), "{ not json");
         var bad = SettingsStore.Load(dir);
-        T.Eq("settings invalid json defaults", 0.3, bad.BackgroundOpacity);
-
-        var srcImg = Path.Combine(dir, "src.jpg");
-        File.WriteAllBytes(srcImg, new byte[] { 1, 2, 3 });
-        var imported = SettingsStore.ImportBackground(srcImg, dir);
-        T.Ok("import background exists", File.Exists(imported));
-        T.Eq("import background ext", ".jpg", Path.GetExtension(imported));
-        T.Eq("import background in dir", dir, Path.GetDirectoryName(imported));
+        T.Ok("settings invalid json defaults", !bad.DarkMode);
 
         try { Directory.Delete(dir, true); } catch { }
+    }
+}
+
+internal static class ThemeTests
+{
+    public static void Run()
+    {
+        T.Section("Theme");
+
+        var darkDoc = EditableRenderer.BuildPreview("# H\r\n\r\nplain", theme: RenderTheme.Dark);
+        T.Ok("dark doc foreground", ReferenceEquals(darkDoc.Foreground, RenderTheme.Dark.Text));
+        var dh = (WpfParagraph)darkDoc.Blocks.FirstBlock!;
+        T.Ok("dark heading foreground", ReferenceEquals(dh.Foreground, RenderTheme.Dark.HeadingFg));
+        T.Eq("dark heading size", 30.0, dh.FontSize);
+
+        var lightDoc = EditableRenderer.BuildPreview("# H");
+        T.Ok("light doc foreground", ReferenceEquals(lightDoc.Foreground, RenderTheme.Light.Text));
+        var lh = (WpfParagraph)lightDoc.Blocks.FirstBlock!;
+        T.Ok("light heading foreground", ReferenceEquals(lh.Foreground, RenderTheme.Light.HeadingFg));
+
+        var rawDark = EditableRenderer.BuildRaw("x", RenderTheme.Dark);
+        T.Ok("raw dark foreground", ReferenceEquals(rawDark.Foreground, RenderTheme.Dark.Text));
+
+        // 深色下恒等依然成立
+        var src = "# H\r\n\r\n- a\r\n\r\n```\r\ncode\r\n```";
+        T.Eq("dark identity", src, EditableRenderer.ReadSource(EditableRenderer.BuildPreview(src, theme: RenderTheme.Dark)));
     }
 }
 
@@ -775,6 +792,7 @@ internal static class Program
         RunGroup("ImageSupport", ImageTests.Run);
         RunGroup("AppInfo", AppInfoTests.Run);
         RunGroup("Settings", SettingsTests.Run);
+        RunGroup("Theme", ThemeTests.Run);
         return T.Report();
     }
 
