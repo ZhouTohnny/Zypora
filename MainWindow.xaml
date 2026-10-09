@@ -65,8 +65,6 @@
                             <MenuItem Header="保存" InputGestureText="Ctrl+S" Click="OnSave"/>
                             <Separator/>
                             <MenuItem Header="导出 PDF…" Click="OnExportPdf"/>
-                            <Separator/>
-                            <MenuItem Header="清空" InputGestureText="Ctrl+Shift+N" Click="OnClear"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                     <Path Width="16" Height="16" Stretch="Uniform"
@@ -95,6 +93,7 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
+                <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
                 <Separator Margin="6,0"/>
                 <ToggleButton x:Name="DarkButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleDark" ToolTip="夜间模式(黑底白字)">
                     <Path Width="15" Height="15" Stretch="Uniform"
