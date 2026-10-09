@@ -20,6 +20,16 @@ E:\MyProgram\Zypora\bin\Debug\net8.0-windows\Zypora.exe
 dotnet publish E:\MyProgram\Zypora\Zypora.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
+## 测试
+
+仓库自带断言测试(无第三方框架):
+
+```powershell
+dotnet run --project tests\Zypora.Tests\Zypora.Tests.csproj
+```
+
+覆盖:查找/替换、表格解析与模板、图片解析/路径/写盘、撤销分组、行内/行级命令、光标映射、渲染与**文本恒等 fuzz**、PDF 导出、版本与命令行参数。
+
 ## 界面说明
 
 - 顶部工具栏:文件操作、视图模式切换与格式快捷按钮。
@@ -123,6 +133,7 @@ dotnet publish E:\MyProgram\Zypora\Zypora.csproj -c Release -r win-x64 --self-co
 | `DocumentCaret.cs` | 字符级光标映射 |
 | `UndoHistory.cs` / `UndoCoordinator.cs` | 撤销栈与分组策略 |
 | `PdfExporter.cs` | QuestPDF 导出 |
+| `tests/Zypora.Tests/` | 断言测试套件(`dotnet run --project tests\Zypora.Tests\Zypora.Tests.csproj`) |
 
 ## 已知限制
 
