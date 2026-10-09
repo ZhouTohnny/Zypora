@@ -375,6 +375,9 @@ public partial class MainWindow : Window
 
     private void OnHeading2(object sender, RoutedEventArgs e) => ToggleHeading(2);
 
+    private void OnToggleTopmost(object sender, RoutedEventArgs e)
+        => Topmost = TopmostButton.IsChecked == true;
+
     // ---- File / export ----
 
     // 新建:开一个新窗口,便于同时编辑多个文件

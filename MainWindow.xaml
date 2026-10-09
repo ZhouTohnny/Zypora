@@ -23,11 +23,29 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ToolbarToggleButton" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E0E0E0"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="#CFE3FF"/>
+                    <Setter Property="Foreground" Value="#1565C0"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" Margin="6,4">
+            <WrapPanel Orientation="Horizontal" Margin="6,4">
                 <Button Content="新建" Style="{StaticResource ToolbarButton}" Click="OnNewWindow" ToolTip="新建窗口 (Ctrl+N)"/>
                 <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
                 <Button Content="打开" Style="{StaticResource ToolbarButton}" Click="OnOpen"/>
@@ -46,7 +64,15 @@
                 <Button Content="代码" Style="{StaticResource ToolbarButton}" Click="OnCode" ToolTip="行内代码 (Ctrl+K)"/>
                 <Button Content="代码块" Style="{StaticResource ToolbarButton}" Click="OnCodeBlock" ToolTip="代码块 (Ctrl+Shift+K)"/>
                 <Button Content="表格" Style="{StaticResource ToolbarButton}" Click="OnInsertTable" ToolTip="插入表格 (Ctrl+Shift+T)"/>
-            </StackPanel>
+                <Separator Margin="6,0"/>
+                <ToggleButton x:Name="TopmostButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleTopmost" ToolTip="窗口置顶(总显示在最前)">
+                    <Path Width="15" Height="15" Stretch="Uniform"
+                          Data="M 10,2 L 14,2 L 14,4 L 13,5 L 17,11 L 18,11 L 18,13 L 6,13 L 6,11 L 7,11 L 11,5 L 10,4 Z M 12,13 L 12,21"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                          StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Fill="Transparent"/>
+                </ToggleButton>
+            </WrapPanel>
         </Border>
 
         <Border x:Name="FindBar" DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Visibility="Collapsed">
