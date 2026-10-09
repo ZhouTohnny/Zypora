@@ -73,7 +73,6 @@
                           StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                 </Button>
                 <Separator Margin="6,0"/>
-                <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
                 <Button x:Name="FormatMenuButton" Content="格式 ▾" Style="{StaticResource ToolbarButton}" ToolTip="格式" Click="OnFormatMenu">
                     <Button.ContextMenu>
                         <ContextMenu>
@@ -93,6 +92,7 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
+                <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
                 <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
                 <Separator Margin="6,0"/>
                 <ToggleButton x:Name="DarkButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleDark" ToolTip="夜间模式(黑底白字)">
