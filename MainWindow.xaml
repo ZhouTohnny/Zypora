@@ -76,16 +76,25 @@
                 </Button>
                 <Separator Margin="6,0"/>
                 <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
-                <Button Content="H1" Style="{StaticResource ToolbarButton}" Click="OnHeading1" ToolTip="一级标题 (Ctrl+1)"/>
-                <Button Content="H2" Style="{StaticResource ToolbarButton}" Click="OnHeading2" ToolTip="二级标题 (Ctrl+2)"/>
-                <Button Content="B" Style="{StaticResource ToolbarButton}" FontWeight="Bold" Click="OnBold" ToolTip="加粗 (Ctrl+B)"/>
-                <Button Content="i" Style="{StaticResource ToolbarButton}" FontStyle="Italic" Click="OnItalic" ToolTip="斜体 (Ctrl+I)"/>
-                <Button Content="• 列表" Style="{StaticResource ToolbarButton}" Click="OnList" ToolTip="无序列表 (Ctrl+Shift+7)"/>
-                <Button Content="1. 列表" Style="{StaticResource ToolbarButton}" Click="OnOrderedList" ToolTip="有序列表"/>
-                <Button Content="引用" Style="{StaticResource ToolbarButton}" Click="OnQuote" ToolTip="引用 (Ctrl+Shift+O)"/>
-                <Button Content="代码" Style="{StaticResource ToolbarButton}" Click="OnCode" ToolTip="行内代码 (Ctrl+K)"/>
-                <Button Content="代码块" Style="{StaticResource ToolbarButton}" Click="OnCodeBlock" ToolTip="代码块 (Ctrl+Shift+K)"/>
-                <Button Content="表格" Style="{StaticResource ToolbarButton}" Click="OnInsertTable" ToolTip="插入表格 (Ctrl+Shift+T)"/>
+                <Button x:Name="FormatMenuButton" Content="格式 ▾" Style="{StaticResource ToolbarButton}" ToolTip="格式" Click="OnFormatMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="一级标题" InputGestureText="Ctrl+1" Click="OnHeading1"/>
+                            <MenuItem Header="二级标题" InputGestureText="Ctrl+2" Click="OnHeading2"/>
+                            <Separator/>
+                            <MenuItem Header="加粗" InputGestureText="Ctrl+B" Click="OnBold"/>
+                            <MenuItem Header="斜体" InputGestureText="Ctrl+I" Click="OnItalic"/>
+                            <Separator/>
+                            <MenuItem Header="无序列表" InputGestureText="Ctrl+Shift+7" Click="OnList"/>
+                            <MenuItem Header="有序列表" Click="OnOrderedList"/>
+                            <MenuItem Header="引用" InputGestureText="Ctrl+Shift+O" Click="OnQuote"/>
+                            <Separator/>
+                            <MenuItem Header="行内代码" InputGestureText="Ctrl+K" Click="OnCode"/>
+                            <MenuItem Header="代码块" InputGestureText="Ctrl+Shift+K" Click="OnCodeBlock"/>
+                            <MenuItem Header="表格" InputGestureText="Ctrl+Shift+T" Click="OnInsertTable"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <Separator Margin="6,0"/>
                 <ToggleButton x:Name="DarkButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleDark" ToolTip="夜间模式(黑底白字)">
                     <Path Width="15" Height="15" Stretch="Uniform"

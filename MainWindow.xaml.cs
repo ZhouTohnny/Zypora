@@ -399,6 +399,15 @@ public partial class MainWindow : Window
         cm.IsOpen = true;
     }
 
+    private void OnFormatMenu(object sender, RoutedEventArgs e)
+    {
+        var cm = FormatMenuButton.ContextMenu;
+        if (cm == null) return;
+        cm.PlacementTarget = FormatMenuButton;
+        cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        cm.IsOpen = true;
+    }
+
     private void OnToggleDark(object sender, RoutedEventArgs e)
     {
         _dark = DarkButton.IsChecked == true;
