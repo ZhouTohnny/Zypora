@@ -51,7 +51,6 @@ public static class EditableRenderer
             FontFamily = new FontFamily(Mono),
             FontSize = 14,
             PagePadding = new Thickness(40, 28, 40, 40),
-            Background = Brushes.White,
             Foreground = Text,
         };
 
@@ -97,7 +96,6 @@ public static class EditableRenderer
             FontFamily = new FontFamily(Body),
             FontSize = 16,
             PagePadding = new Thickness(40, 28, 40, 40),
-            Background = Brushes.White,
             Foreground = Text,
         };
 

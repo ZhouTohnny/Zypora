@@ -76,6 +76,9 @@
                 <Button Content="代码块" Style="{StaticResource ToolbarButton}" Click="OnCodeBlock" ToolTip="代码块 (Ctrl+Shift+K)"/>
                 <Button Content="表格" Style="{StaticResource ToolbarButton}" Click="OnInsertTable" ToolTip="插入表格 (Ctrl+Shift+T)"/>
                 <Separator Margin="6,0"/>
+                <Button x:Name="SettingsButton" Padding="10,5" Style="{StaticResource ToolbarButton}" Click="OnSettings" ToolTip="设置">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="15"/>
+                </Button>
                 <ToggleButton x:Name="TopmostButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleTopmost" ToolTip="窗口置顶(总显示在最前)">
                     <Path Width="15" Height="15" Stretch="Uniform"
                           Data="M 10,2 L 14,2 L 14,4 L 13,5 L 17,11 L 18,11 L 18,13 L 6,13 L 6,11 L 7,11 L 11,5 L 10,4 Z M 12,13 L 12,21"
@@ -104,7 +107,7 @@
             </StackPanel>
         </Border>
 
-        <Grid>
+        <Grid Background="White">
             <RichTextBox x:Name="Editor"
                          AcceptsReturn="True"
                          AcceptsTab="True"

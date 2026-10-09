@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private bool _renderQueued;
     private bool _rendering;
 
+    private AppSettings _settings = new();
+
     private readonly List<(int Start, int Length)> _matches = new();
     private int _matchIndex = -1;
     private static readonly Brush MatchBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xF3, 0xA0));
@@ -77,6 +79,9 @@ public partial class MainWindow : Window
         RefreshDirty();
         _undo.Reset(_savedText, 0);
         UpdateChrome();
+
+        _settings = SettingsStore.Load(SettingsStore.DefaultDir);
+        ApplyBackground();
     }
 
     private string GetSourceText() => EditableRenderer.ReadSource(Editor.Document);
@@ -385,6 +390,44 @@ public partial class MainWindow : Window
         cm.PlacementTarget = FileMenuButton;
         cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         cm.IsOpen = true;
+    }
+
+    private void OnSettings(object sender, RoutedEventArgs e)
+    {
+        var w = new SettingsWindow(_settings, SettingsStore.DefaultDir) { Owner = this };
+        if (w.ShowDialog() == true)
+        {
+            _settings = w.Result;
+            SettingsStore.Save(SettingsStore.DefaultDir, _settings);
+            ApplyBackground();
+        }
+    }
+
+    private void ApplyBackground()
+    {
+        var path = _settings.BackgroundImagePath;
+        if (!string.IsNullOrEmpty(path) && File.Exists(path))
+        {
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(path);
+                bmp.EndInit();
+                Editor.Background = new ImageBrush(bmp)
+                {
+                    Stretch = Stretch.UniformToFill,
+                    Opacity = Math.Clamp(_settings.BackgroundOpacity, 0, 1),
+                };
+                return;
+            }
+            catch
+            {
+                // 加载失败 → 回退白底
+            }
+        }
+        Editor.Background = Brushes.White;
     }
 
     // ---- File / export ----

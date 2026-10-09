@@ -726,6 +726,38 @@ internal static class AppInfoTests
     }
 }
 
+internal static class SettingsTests
+{
+    public static void Run()
+    {
+        T.Section("SettingsStore");
+
+        var dir = Path.Combine(Path.GetTempPath(), "zypora-settings-" + Guid.NewGuid().ToString("N"));
+
+        var def = SettingsStore.Load(dir);
+        T.Eq("settings default opacity", 0.3, def.BackgroundOpacity);
+        T.Ok("settings default no image", def.BackgroundImagePath == null);
+
+        SettingsStore.Save(dir, new AppSettings { BackgroundImagePath = "C:/x.png", BackgroundOpacity = 0.55 });
+        var loaded = SettingsStore.Load(dir);
+        T.Eq("settings reload opacity", 0.55, loaded.BackgroundOpacity);
+        T.Eq("settings reload path", "C:/x.png", loaded.BackgroundImagePath);
+
+        File.WriteAllText(Path.Combine(dir, "settings.json"), "{ not json");
+        var bad = SettingsStore.Load(dir);
+        T.Eq("settings invalid json defaults", 0.3, bad.BackgroundOpacity);
+
+        var srcImg = Path.Combine(dir, "src.jpg");
+        File.WriteAllBytes(srcImg, new byte[] { 1, 2, 3 });
+        var imported = SettingsStore.ImportBackground(srcImg, dir);
+        T.Ok("import background exists", File.Exists(imported));
+        T.Eq("import background ext", ".jpg", Path.GetExtension(imported));
+        T.Eq("import background in dir", dir, Path.GetDirectoryName(imported));
+
+        try { Directory.Delete(dir, true); } catch { }
+    }
+}
+
 internal static class Program
 {
     [STAThread]
@@ -742,6 +774,7 @@ internal static class Program
         RunGroup("PdfExporter", PdfTests.Run);
         RunGroup("ImageSupport", ImageTests.Run);
         RunGroup("AppInfo", AppInfoTests.Run);
+        RunGroup("Settings", SettingsTests.Run);
         return T.Report();
     }
 
