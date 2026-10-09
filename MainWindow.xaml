@@ -46,12 +46,23 @@
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1">
             <WrapPanel Orientation="Horizontal" Margin="6,4">
-                <Button Content="新建" Style="{StaticResource ToolbarButton}" Click="OnNewWindow" ToolTip="新建窗口 (Ctrl+N)"/>
-                <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
-                <Button Content="打开" Style="{StaticResource ToolbarButton}" Click="OnOpen"/>
-                <Button Content="保存" Style="{StaticResource ToolbarButton}" Click="OnSave"/>
-                <Separator Margin="6,0"/>
-                <Button Content="导出 PDF" Style="{StaticResource ToolbarButton}" Click="OnExportPdf"/>
+                <Button x:Name="FileMenuButton" Style="{StaticResource ToolbarButton}" ToolTip="文件" Click="OnFileMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="新建窗口" InputGestureText="Ctrl+N" Click="OnNewWindow"/>
+                            <MenuItem Header="打开…" InputGestureText="Ctrl+O" Click="OnOpen"/>
+                            <MenuItem Header="保存" InputGestureText="Ctrl+S" Click="OnSave"/>
+                            <Separator/>
+                            <MenuItem Header="导出 PDF…" Click="OnExportPdf"/>
+                            <Separator/>
+                            <MenuItem Header="清空" InputGestureText="Ctrl+Shift+N" Click="OnClear"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <Path Width="16" Height="16" Stretch="Uniform"
+                          Data="M 3,5 L 17,5 M 3,10 L 17,10 M 3,15 L 17,15"
+                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                          StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                </Button>
                 <Separator Margin="6,0"/>
                 <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
                 <Button Content="H1" Style="{StaticResource ToolbarButton}" Click="OnHeading1" ToolTip="一级标题 (Ctrl+1)"/>

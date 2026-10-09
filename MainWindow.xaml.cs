@@ -378,6 +378,15 @@ public partial class MainWindow : Window
     private void OnToggleTopmost(object sender, RoutedEventArgs e)
         => Topmost = TopmostButton.IsChecked == true;
 
+    private void OnFileMenu(object sender, RoutedEventArgs e)
+    {
+        var cm = FileMenuButton.ContextMenu;
+        if (cm == null) return;
+        cm.PlacementTarget = FileMenuButton;
+        cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        cm.IsOpen = true;
+    }
+
     // ---- File / export ----
 
     // 新建:开一个新窗口,便于同时编辑多个文件
