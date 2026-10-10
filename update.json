@@ -1,8 +1,8 @@
 {
-  "version": "1.1.0",
-  "url": "https://your-domain.example/zypora/Zypora-win-x64.zip",
+  "version": "1.1.1",
+  "url": "https://github.com/ZhouTohnny/Zypora/releases/download/v1.1.1/Zypora-win-x64.zip",
   "url2": "https://github.com/ZhouTohnny/Zypora/releases/latest/download/Zypora-win-x64.zip",
-  "sha256": "",
-  "notes": "",
-  "_comment": "发布新版本时:把 version 改成新版本号(必须大于程序当前版本);url 换成国内直链(url 是主下载源);url2 是备下载源;sha256 可选(填了会校验下载包);notes 会显示在更新提示窗口里"
+  "sha256": "87b98b7d45de9ccf7e75a6870297e35f0c6ed5ec5d8fa27895302bdced75a4f0",
+  "notes": "新增:主题(常规/夜间/护眼)、下拉菜单跟随主题、沉浸式阅读模式",
+  "_comment": "发布新版本时:改 version(必须大于程序当前版本);url 换成你的国内直链最优先;sha256 若重新打包需同步更新或清空;notes 会显示在更新提示窗口里"
 }
