@@ -36,7 +36,14 @@ public partial class MainWindow : Window
     private double _fitWidth;
 
     private AppSettings _settings = new();
-    private bool _dark;
+    private AppTheme _theme = AppTheme.Light;
+
+    // ---- 阅读模式状态 ----
+    private bool _reading;
+    private WindowStyle _styleBeforeReading;
+    private WindowState _stateBeforeReading;
+    private Rect _boundsBeforeReading;
+    private Visibility _findBarBeforeReading = Visibility.Collapsed;
 
     private readonly List<(int Start, int Length)> _matches = new();
     private int _matchIndex = -1;
@@ -93,9 +100,9 @@ public partial class MainWindow : Window
         UpdateChrome();
 
         _settings = SettingsStore.Load(SettingsStore.DefaultDir);
-        _dark = _settings.DarkMode;
-        DarkButton.IsChecked = _dark;
+        _theme = _settings.ResolveTheme();
         ApplyTheme();
+        UpdateThemeMenu();
     }
 
     private string GetSourceText() => EditableRenderer.ReadSource(Editor.Document);
@@ -181,7 +188,7 @@ public partial class MainWindow : Window
 
     private FlowDocument BuildForMode(string source)
     {
-        var theme = _dark ? RenderTheme.Dark : RenderTheme.Light;
+        var theme = RenderTheme.Of(_theme);
         return _mode switch
         {
             ViewMode.Raw => EditableRenderer.BuildRaw(source, theme),
@@ -432,49 +439,142 @@ public partial class MainWindow : Window
         cm.IsOpen = true;
     }
 
-    private void OnToggleDark(object sender, RoutedEventArgs e)
+    private void OnThemeMenu(object sender, RoutedEventArgs e)
     {
-        _dark = DarkButton.IsChecked == true;
+        var cm = ThemeMenuButton.ContextMenu;
+        if (cm == null) return;
+        cm.PlacementTarget = ThemeMenuButton;
+        cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        cm.IsOpen = true;
+    }
+
+    private void OnSelectTheme(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.MenuItem item || item.Tag is not string code) return;
+
+        var theme = AppThemeCodes.Parse(code);
+        if (theme == _theme)
+        {
+            UpdateThemeMenu();
+            return;
+        }
+
+        _theme = theme;
         ApplyTheme();
-        SettingsStore.Save(SettingsStore.DefaultDir, new AppSettings { DarkMode = _dark });
+        UpdateThemeMenu();
+
+        var s = SettingsStore.Load(SettingsStore.DefaultDir);
+        s.Theme = AppThemeCodes.ToCode(_theme);
+        s.DarkMode = _theme == AppTheme.Dark;
+        SettingsStore.Save(SettingsStore.DefaultDir, s);
+        _settings = s;
+    }
+
+    private void UpdateThemeMenu()
+    {
+        var items = new[]
+        {
+            (Item: ThemeLightItem, Theme: AppTheme.Light),
+            (Item: ThemeDarkItem, Theme: AppTheme.Dark),
+            (Item: ThemeEyeItem, Theme: AppTheme.Eye),
+        };
+        foreach (var (item, theme) in items)
+        {
+            bool current = theme == _theme;
+            item.Header = (current ? "✓ " : "    ") + AppThemeCodes.Label(theme);
+            item.FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal;
+        }
     }
 
     private void ApplyTheme()
     {
+        var c = ChromeTheme.Of(_theme);
         var res = Resources;
-        if (_dark)
-        {
-            res["Br.WindowBg"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-            res["Br.PanelBg"] = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26));
-            res["Br.FindBg"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2B));
-            res["Br.PanelBorder"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A));
-            res["Br.Fg"] = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
-            res["Br.Muted"] = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0));
-            res["Br.Hover"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A));
-            res["Br.Checked"] = new SolidColorBrush(Color.FromRgb(0x2F, 0x4A, 0x6E));
-            res["Br.CheckedFg"] = new SolidColorBrush(Color.FromRgb(0x9C, 0xC7, 0xFF));
-        }
-        else
-        {
-            res["Br.WindowBg"] = new SolidColorBrush(Color.FromRgb(0xF4, 0xF4, 0xF4));
-            res["Br.PanelBg"] = Brushes.White;
-            res["Br.FindBg"] = new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFA));
-            res["Br.PanelBorder"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
-            res["Br.Fg"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-            res["Br.Muted"] = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
-            res["Br.Hover"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
-            res["Br.Checked"] = new SolidColorBrush(Color.FromRgb(0xCF, 0xE3, 0xFF));
-            res["Br.CheckedFg"] = new SolidColorBrush(Color.FromRgb(0x15, 0x65, 0xC0));
-        }
+        res["Br.WindowBg"] = new SolidColorBrush(c.WindowBg);
+        res["Br.PanelBg"] = new SolidColorBrush(c.PanelBg);
+        res["Br.FindBg"] = new SolidColorBrush(c.FindBg);
+        res["Br.PanelBorder"] = new SolidColorBrush(c.PanelBorder);
+        res["Br.Fg"] = new SolidColorBrush(c.Fg);
+        res["Br.Muted"] = new SolidColorBrush(c.Muted);
+        res["Br.Hover"] = new SolidColorBrush(c.Hover);
+        res["Br.Checked"] = new SolidColorBrush(c.Checked);
+        res["Br.CheckedFg"] = new SolidColorBrush(c.CheckedFg);
+        res["Br.MenuBg"] = new SolidColorBrush(c.MenuBg);
+        res["Br.MenuFg"] = new SolidColorBrush(c.MenuFg);
+        res["Br.MenuHover"] = new SolidColorBrush(c.MenuHover);
+        res["Br.MenuBorder"] = new SolidColorBrush(c.MenuBorder);
 
-        Editor.Background = _dark ? new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E)) : Brushes.White;
-        Editor.CaretBrush = _dark ? Brushes.White : Brushes.Black;
+        Editor.Background = new SolidColorBrush(c.EditorBg);
+        Editor.CaretBrush = new SolidColorBrush(c.Caret);
 
         // 用新主题重建文档
         var source = GetSourceText();
         int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
         SetDocument(BuildForMode(source));
         Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, source.Length));
+    }
+
+    // ---- 阅读模式(沉浸式) ----
+
+    private void OnEnterReading(object sender, RoutedEventArgs e) => EnterReadingMode();
+
+    private void OnExitReading(object sender, RoutedEventArgs e) => ExitReadingMode();
+
+    private void EnterReadingMode()
+    {
+        if (_reading) return;
+        _reading = true;
+
+        _styleBeforeReading = WindowStyle;
+        _stateBeforeReading = WindowState;
+        if (WindowState == WindowState.Normal) _boundsBeforeReading = new Rect(Left, Top, Width, Height);
+        _findBarBeforeReading = FindBar.Visibility;
+
+        if (_mode != ViewMode.Preview)
+        {
+            _mode = ViewMode.Preview;
+            ModeButton.Content = "原生";
+            SetDocument(BuildForMode(GetSourceText()));
+        }
+
+        Editor.IsReadOnly = true;
+        FindBar.Visibility = Visibility.Collapsed;
+        ToolbarBorder.Visibility = Visibility.Collapsed;
+        ExitReadingButton.Visibility = Visibility.Visible;
+
+        WindowStyle = WindowStyle.None;
+        WindowState = WindowState.Maximized;
+        Editor.Focus();
+    }
+
+    private void ExitReadingMode()
+    {
+        if (!_reading) return;
+        _reading = false;
+
+        ExitReadingButton.Visibility = Visibility.Collapsed;
+        ToolbarBorder.Visibility = Visibility.Visible;
+        FindBar.Visibility = _findBarBeforeReading;
+
+        WindowState = WindowState.Normal;
+        WindowStyle = _styleBeforeReading;
+        if (_stateBeforeReading == WindowState.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+        else if (_boundsBeforeReading.Width > 100)
+        {
+            Left = _boundsBeforeReading.Left;
+            Top = _boundsBeforeReading.Top;
+            Width = _boundsBeforeReading.Width;
+            Height = _boundsBeforeReading.Height;
+        }
+
+        Editor.IsReadOnly = false;
+        _mode = ViewMode.Preview;
+        ModeButton.Content = "原生";
+        SetDocument(BuildForMode(GetSourceText()));
+        Editor.Focus();
     }
 
     // ---- File / export ----
@@ -917,6 +1017,24 @@ public partial class MainWindow : Window
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+        // 阅读模式:仅允许退出与复制/全选,屏蔽编辑类快捷键
+        if (_reading)
+        {
+            if (e.Key == Key.Escape)
+            {
+                ExitReadingMode();
+                e.Handled = true;
+                return;
+            }
+            if (ctrl && e.Key is not (Key.C or Key.A or Key.Insert))
+            {
+                e.Handled = true;
+                return;
+            }
+            base.OnPreviewKeyDown(e);
+            return;
+        }
 
         // 空格/回车作为输入组边界:先收尾当前输入组
         if (!ctrl && !shift && (e.Key == Key.Space || e.Key == Key.Enter || e.Key == Key.Return))

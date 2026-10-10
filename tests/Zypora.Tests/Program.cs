@@ -772,6 +772,50 @@ internal static class ThemeTests
         // 深色下恒等依然成立
         var src = "# H\r\n\r\n- a\r\n\r\n```\r\ncode\r\n```";
         T.Eq("dark identity", src, EditableRenderer.ReadSource(EditableRenderer.BuildPreview(src, theme: RenderTheme.Dark)));
+
+        // 三档主题:代码解析 / 标签
+        T.Ok("apptheme parse eye", AppThemeCodes.Parse("eye") == AppTheme.Eye);
+        T.Ok("apptheme parse dark", AppThemeCodes.Parse("dark") == AppTheme.Dark);
+        T.Ok("apptheme parse unknown", AppThemeCodes.Parse("nope") == AppTheme.Light);
+        T.Ok("apptheme parse null", AppThemeCodes.Parse(null) == AppTheme.Light);
+        T.Ok("apptheme parse case", AppThemeCodes.Parse("EYE") == AppTheme.Eye);
+        T.Eq("apptheme code roundtrip", "eye", AppThemeCodes.ToCode(AppTheme.Eye));
+        T.Eq("apptheme label eye", "护眼", AppThemeCodes.Label(AppTheme.Eye));
+        T.Eq("apptheme label light", "常规", AppThemeCodes.Label(AppTheme.Light));
+
+        // 界面配色
+        var light = ChromeTheme.Of(AppTheme.Light);
+        var dark = ChromeTheme.Of(AppTheme.Dark);
+        var eye = ChromeTheme.Of(AppTheme.Eye);
+        T.Eq("chrome light window", (Color)ColorConverter.ConvertFromString("#F4F4F4"), light.WindowBg);
+        T.Eq("chrome dark editor bg", (Color)ColorConverter.ConvertFromString("#1E1E1E"), dark.EditorBg);
+        T.Eq("chrome eye editor bg", (Color)ColorConverter.ConvertFromString("#C7EDCC"), eye.EditorBg);
+        T.Eq("chrome eye panel", (Color)ColorConverter.ConvertFromString("#D6F0D9"), eye.PanelBg);
+        T.Ok("chrome editors differ", light.EditorBg != dark.EditorBg && dark.EditorBg != eye.EditorBg && light.EditorBg != eye.EditorBg);
+        T.Ok("chrome eye fg readable", eye.Fg != eye.EditorBg && eye.Fg != eye.PanelBg);
+        T.Ok("chrome menu colors differ", light.MenuBg != dark.MenuBg && dark.MenuBg != eye.MenuBg && light.MenuBg != eye.MenuBg);
+        T.Ok("chrome menu hover differs from bg", eye.MenuHover != eye.MenuBg && dark.MenuHover != dark.MenuBg);
+
+        // 护眼渲染主题
+        T.Ok("render theme of eye", ReferenceEquals(RenderTheme.Of(AppTheme.Eye), RenderTheme.Eye));
+        var eyeSrc = "# H\r\n\r\n正文 **粗** `码`\r\n\r\n| a | b |\r\n|:--|:--|";
+        var eyeDoc = EditableRenderer.BuildPreview(eyeSrc, theme: RenderTheme.Eye);
+        T.Ok("eye doc foreground", ReferenceEquals(eyeDoc.Foreground, RenderTheme.Eye.Text));
+        T.Eq("eye identity", eyeSrc, EditableRenderer.ReadSource(eyeDoc));
+        T.Ok("eye palette differs", !ReferenceEquals(RenderTheme.Eye.Text, RenderTheme.Light.Text)
+            && !ReferenceEquals(RenderTheme.Eye.CodeBg, RenderTheme.Light.CodeBg));
+
+        // 设置:旧配置迁移 / 主题往返
+        T.Ok("legacy darkmode true", new AppSettings { DarkMode = true }.ResolveTheme() == AppTheme.Dark);
+        T.Ok("legacy darkmode false", new AppSettings { DarkMode = false }.ResolveTheme() == AppTheme.Light);
+        T.Ok("theme field wins", new AppSettings { DarkMode = true, Theme = "eye" }.ResolveTheme() == AppTheme.Eye);
+        T.Ok("invalid theme fallback", new AppSettings { Theme = "weird" }.ResolveTheme() == AppTheme.Light);
+
+        var themeDir = Path.Combine(Path.GetTempPath(), "zypora-theme-" + Guid.NewGuid().ToString("N"));
+        SettingsStore.Save(themeDir, new AppSettings { Theme = "eye", DarkMode = false, SkippedVersion = "9.9.9" });
+        var themeLoaded = SettingsStore.Load(themeDir);
+        T.Ok("theme roundtrip", themeLoaded.ResolveTheme() == AppTheme.Eye && themeLoaded.SkippedVersion == "9.9.9");
+        try { Directory.Delete(themeDir, true); } catch { }
     }
 }
 

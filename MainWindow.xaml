@@ -20,6 +20,52 @@
         <SolidColorBrush x:Key="Br.Hover" Color="#E0E0E0"/>
         <SolidColorBrush x:Key="Br.Checked" Color="#CFE3FF"/>
         <SolidColorBrush x:Key="Br.CheckedFg" Color="#1565C0"/>
+        <SolidColorBrush x:Key="Br.MenuBg" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Br.MenuFg" Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="Br.MenuHover" Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="Br.MenuBorder" Color="#E0E0E0"/>
+
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource Br.MenuBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Br.MenuFg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Br.MenuBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource Br.MenuFg}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                                CornerRadius="3" SnapsToDevicePixels="True">
+                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Br.MenuHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MenuSeparator" TargetType="Separator">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Margin="6,4" Background="{DynamicResource Br.MenuBorder}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="ToolbarButton" TargetType="Button">
             <Setter Property="Padding" Value="12,6"/>
@@ -55,7 +101,7 @@
     </Window.Resources>
 
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource Br.PanelBg}" BorderBrush="{DynamicResource Br.PanelBorder}" BorderThickness="0,0,0,1">
+        <Border x:Name="ToolbarBorder" DockPanel.Dock="Top" Background="{DynamicResource Br.PanelBg}" BorderBrush="{DynamicResource Br.PanelBorder}" BorderThickness="0,0,0,1">
             <WrapPanel Orientation="Horizontal" Margin="6,4">
                 <Button x:Name="FileMenuButton" Style="{StaticResource ToolbarButton}" ToolTip="文件" Click="OnFileMenu">
                     <Button.ContextMenu>
@@ -63,7 +109,7 @@
                             <MenuItem Header="新建窗口" InputGestureText="Ctrl+N" Click="OnNewWindow"/>
                             <MenuItem Header="打开…" InputGestureText="Ctrl+O" Click="OnOpen"/>
                             <MenuItem Header="保存" InputGestureText="Ctrl+S" Click="OnSave"/>
-                            <Separator/>
+                            <Separator Style="{StaticResource MenuSeparator}"/>
                             <MenuItem Header="导出 PDF…" Click="OnExportPdf"/>
                         </ContextMenu>
                     </Button.ContextMenu>
@@ -78,14 +124,14 @@
                         <ContextMenu>
                             <MenuItem Header="一级标题" InputGestureText="Ctrl+1" Click="OnHeading1"/>
                             <MenuItem Header="二级标题" InputGestureText="Ctrl+2" Click="OnHeading2"/>
-                            <Separator/>
+                            <Separator Style="{StaticResource MenuSeparator}"/>
                             <MenuItem Header="加粗" InputGestureText="Ctrl+B" Click="OnBold"/>
                             <MenuItem Header="斜体" InputGestureText="Ctrl+I" Click="OnItalic"/>
-                            <Separator/>
+                            <Separator Style="{StaticResource MenuSeparator}"/>
                             <MenuItem Header="无序列表" InputGestureText="Ctrl+Shift+7" Click="OnList"/>
                             <MenuItem Header="有序列表" Click="OnOrderedList"/>
                             <MenuItem Header="引用" InputGestureText="Ctrl+Shift+O" Click="OnQuote"/>
-                            <Separator/>
+                            <Separator Style="{StaticResource MenuSeparator}"/>
                             <MenuItem Header="行内代码" InputGestureText="Ctrl+K" Click="OnCode"/>
                             <MenuItem Header="代码块" InputGestureText="Ctrl+Shift+K" Click="OnCodeBlock"/>
                             <MenuItem Header="表格" InputGestureText="Ctrl+Shift+T" Click="OnInsertTable"/>
@@ -93,15 +139,18 @@
                     </Button.ContextMenu>
                 </Button>
                 <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
+                <Button x:Name="ReadButton" Content="阅读" Style="{StaticResource ToolbarButton}" Click="OnEnterReading" ToolTip="沉浸式阅读模式(退出:Esc 或右上角按钮)"/>
                 <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
                 <Separator Margin="6,0"/>
-                <ToggleButton x:Name="DarkButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleDark" ToolTip="夜间模式(黑底白字)">
-                    <Path Width="15" Height="15" Stretch="Uniform"
-                          Data="M 7,9 A 5,5 0 1 1 17,9 A 5,5 0 1 1 7,9 Z M 9.5,14.4 L 9.5,17 M 14.5,14.4 L 14.5,17 M 10.5,19 L 13.5,19"
-                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
-                          StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                          Fill="Transparent"/>
-                </ToggleButton>
+                <Button x:Name="ThemeMenuButton" Content="主题 ▾" Style="{StaticResource ToolbarButton}" ToolTip="主题:常规 / 夜间 / 护眼" Click="OnThemeMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem x:Name="ThemeLightItem" Header="   常规" Tag="light" Click="OnSelectTheme"/>
+                            <MenuItem x:Name="ThemeDarkItem" Header="   夜间" Tag="dark" Click="OnSelectTheme"/>
+                            <MenuItem x:Name="ThemeEyeItem" Header="   护眼" Tag="eye" Click="OnSelectTheme"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <ToggleButton x:Name="TopmostButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleTopmost" ToolTip="窗口置顶(总显示在最前)">
                     <Path Width="15" Height="15" Stretch="Uniform"
                           Data="M 10,2 L 14,2 L 14,4 L 13,5 L 17,11 L 18,11 L 18,13 L 6,13 L 6,11 L 7,11 L 11,5 L 10,4 Z M 12,13 L 12,21"
@@ -144,6 +193,26 @@
                          BorderThickness="0"
                          TextChanged="OnTextChanged"/>
 
+            <Button x:Name="ExitReadingButton" Content="退出阅读" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,14,18,0" Cursor="Hand" Visibility="Collapsed" ToolTip="退出阅读模式 (Esc)"
+                    Click="OnExitReading">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Padding" Value="12,6"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="FontSize" Value="13"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Foreground" Value="{DynamicResource Br.Fg}"/>
+                        <Setter Property="Opacity" Value="0.4"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Br.Hover}"/>
+                                <Setter Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
         </Grid>
     </DockPanel>
 </Window>

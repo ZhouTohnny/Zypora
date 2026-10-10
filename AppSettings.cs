@@ -7,8 +7,16 @@ public sealed class AppSettings
 {
     public bool DarkMode { get; set; }
 
+    // 主题代码:"light" / "dark" / "eye";为空时回退到旧的 DarkMode 字段
+    public string? Theme { get; set; }
+
     // 用户选择"以后再说"的版本号:该版本不再提示
     public string? SkippedVersion { get; set; }
+
+    public AppTheme ResolveTheme() =>
+        string.IsNullOrWhiteSpace(Theme)
+            ? (DarkMode ? AppTheme.Dark : AppTheme.Light)
+            : AppThemeCodes.Parse(Theme);
 }
 
 public static class SettingsStore
