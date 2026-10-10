@@ -708,10 +708,10 @@ internal static class AppInfoTests
         T.Section("App info");
         var asm = typeof(Zypora.MainWindow).Assembly;
         var ver = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        T.Ok("app version is 1.0.2", ver != null && ver.StartsWith("1.0.2"), "ver=" + ver);
+        T.Ok("app version is 1.1.0", ver != null && ver.StartsWith("1.1.0"), "ver=" + ver);
 
-        T.Eq("version suffix strips hash", " v1.0.2", AppInfo.VersionSuffix("1.0.2+bcf662f"));
-        T.Eq("version suffix plain", " v1.0.2", AppInfo.VersionSuffix("1.0.2"));
+        T.Eq("version suffix strips hash", " v1.1.0", AppInfo.VersionSuffix("1.1.0+bcf662f"));
+        T.Eq("version suffix plain", " v1.1.0", AppInfo.VersionSuffix("1.1.0"));
         T.Eq("version suffix empty", "", AppInfo.VersionSuffix(""));
         T.Eq("version suffix null", "", AppInfo.VersionSuffix(null));
 
