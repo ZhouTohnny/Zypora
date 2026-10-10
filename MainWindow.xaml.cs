@@ -280,8 +280,50 @@ public partial class MainWindow : Window
 
     private void UpdateChrome()
     {
-        ModeButton.Content = _mode == ViewMode.Preview ? "原生" : "预览";
+        UpdateModeMenu();
         Title = "Zypora";
+    }
+
+    // ---- 模式下拉(预览 / 原生 / 阅读) ----
+
+    private void OnModeMenu(object sender, RoutedEventArgs e)
+    {
+        var cm = ModeMenuButton.ContextMenu;
+        if (cm == null) return;
+        cm.PlacementTarget = ModeMenuButton;
+        cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        cm.IsOpen = true;
+    }
+
+    private void OnSelectMode(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.MenuItem item || item.Tag is not string tag) return;
+
+        switch (tag)
+        {
+            case "raw":
+                SetMode(ViewMode.Raw);
+                break;
+            case "read":
+                EnterReadingMode();
+                break;
+            default:
+                SetMode(ViewMode.Preview);
+                break;
+        }
+    }
+
+    private void UpdateModeMenu()
+    {
+        MarkMenuItem(ModePreviewItem, _mode == ViewMode.Preview, "预览");
+        MarkMenuItem(ModeRawItem, _mode == ViewMode.Raw, "原生");
+        MarkMenuItem(ModeReadItem, false, "阅读");
+    }
+
+    private static void MarkMenuItem(System.Windows.Controls.MenuItem item, bool current, string label)
+    {
+        item.Header = (current ? "✓ " : "    ") + label;
+        item.FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal;
     }
 
     private void ToggleInline(string marker, bool requireSelection = false)
@@ -472,18 +514,9 @@ public partial class MainWindow : Window
 
     private void UpdateThemeMenu()
     {
-        var items = new[]
-        {
-            (Item: ThemeLightItem, Theme: AppTheme.Light),
-            (Item: ThemeDarkItem, Theme: AppTheme.Dark),
-            (Item: ThemeEyeItem, Theme: AppTheme.Eye),
-        };
-        foreach (var (item, theme) in items)
-        {
-            bool current = theme == _theme;
-            item.Header = (current ? "✓ " : "    ") + AppThemeCodes.Label(theme);
-            item.FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal;
-        }
+        MarkMenuItem(ThemeLightItem, _theme == AppTheme.Light, AppThemeCodes.Label(AppTheme.Light));
+        MarkMenuItem(ThemeDarkItem, _theme == AppTheme.Dark, AppThemeCodes.Label(AppTheme.Dark));
+        MarkMenuItem(ThemeEyeItem, _theme == AppTheme.Eye, AppThemeCodes.Label(AppTheme.Eye));
     }
 
     private void ApplyTheme()
@@ -533,7 +566,7 @@ public partial class MainWindow : Window
         if (_mode != ViewMode.Preview)
         {
             _mode = ViewMode.Preview;
-            ModeButton.Content = "原生";
+            UpdateModeMenu();
             SetDocument(BuildForMode(GetSourceText()));
         }
 
@@ -572,7 +605,7 @@ public partial class MainWindow : Window
 
         Editor.IsReadOnly = false;
         _mode = ViewMode.Preview;
-        ModeButton.Content = "原生";
+        UpdateModeMenu();
         SetDocument(BuildForMode(GetSourceText()));
         Editor.Focus();
     }

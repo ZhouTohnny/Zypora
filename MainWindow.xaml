@@ -30,7 +30,18 @@
             <Setter Property="Foreground" Value="{DynamicResource Br.MenuFg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Br.MenuBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="4" SnapsToDevicePixels="True">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="MenuItem">
@@ -42,7 +53,15 @@
                     <ControlTemplate TargetType="MenuItem">
                         <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
                                 CornerRadius="3" SnapsToDevicePixels="True">
-                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Margin="28,0,2,0"
+                                           Foreground="{DynamicResource Br.Muted}" FontSize="12" VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
@@ -138,8 +157,15 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
-                <Button x:Name="ModeButton" Content="原生" Style="{StaticResource ToolbarButton}" Click="OnTogglePreview" ToolTip="切换 预览 / 原生 (Ctrl+/)"/>
-                <Button x:Name="ReadButton" Content="阅读" Style="{StaticResource ToolbarButton}" Click="OnEnterReading" ToolTip="沉浸式阅读模式(退出:Esc 或右上角按钮)"/>
+                <Button x:Name="ModeMenuButton" Content="模式 ▾" Style="{StaticResource ToolbarButton}" ToolTip="视图模式:预览 / 原生 / 阅读" Click="OnModeMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem x:Name="ModePreviewItem" Header="   预览" Tag="preview" Click="OnSelectMode"/>
+                            <MenuItem x:Name="ModeRawItem" Header="   原生" Tag="raw" Click="OnSelectMode"/>
+                            <MenuItem x:Name="ModeReadItem" Header="   阅读" Tag="read" Click="OnSelectMode"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
                 <Separator Margin="6,0"/>
                 <Button x:Name="ThemeMenuButton" Content="主题 ▾" Style="{StaticResource ToolbarButton}" ToolTip="主题:常规 / 夜间 / 护眼" Click="OnThemeMenu">
