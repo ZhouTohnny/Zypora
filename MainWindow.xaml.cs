@@ -72,6 +72,7 @@ public partial class MainWindow : Window
         Editor.AllowDrop = true;
         Editor.PreviewDragOver += OnDragOver;
         Editor.PreviewDrop += OnDrop;
+        Editor.SizeChanged += (_, _) => ApplyPageWidth();
 
         _mode = ViewMode.Preview;
         SetDocument(BuildForMode(LoadWelcomeText()));
@@ -98,7 +99,43 @@ public partial class MainWindow : Window
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
+        ApplyPageWidth();
         RefreshDirty();
+    }
+
+    /// <summary>内容过宽时给文档设定 PageWidth,让底部出现可拖动的横向滚动条;否则保持自动换行。</summary>
+    private void ApplyPageWidth()
+    {
+        var doc = Editor.Document;
+        if (doc == null) return;
+
+        double viewport = GetViewportWidth();
+        if (viewport <= 50) return; // 布局尚未完成,等 SizeChanged 再处理
+
+        double content = EditableRenderer.GetContentWidth(doc);
+        double target = double.NaN;
+        if (content > 0)
+        {
+            double need = content + doc.PagePadding.Left + doc.PagePadding.Right + 16;
+            if (need > viewport - 1) target = Math.Max(need, viewport);
+        }
+
+        bool curNaN = double.IsNaN(doc.PageWidth);
+        bool tgtNaN = double.IsNaN(target);
+        if (curNaN && tgtNaN) return;
+        if (!curNaN && !tgtNaN && Math.Abs(doc.PageWidth - target) < 0.5) return;
+        doc.PageWidth = target;
+    }
+
+    private double GetViewportWidth()
+    {
+        Editor.ApplyTemplate();
+        if (Editor.Template?.FindName("PART_ContentHost", Editor) is System.Windows.Controls.ScrollViewer sv && sv.ViewportWidth > 1)
+        {
+            return sv.ViewportWidth;
+        }
+        double width = Editor.ActualWidth - Editor.BorderThickness.Left - Editor.BorderThickness.Right;
+        return width > 1 ? width : Math.Max(1, Editor.ActualWidth);
     }
 
     private void RefreshDirty()

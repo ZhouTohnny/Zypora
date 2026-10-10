@@ -775,6 +775,35 @@ internal static class ThemeTests
     }
 }
 
+internal static class ContentWidthTests
+{
+    public static void Run()
+    {
+        T.Section("ContentWidth");
+
+        T.Ok("empty doc zero", EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview("")) == 0);
+
+        double plain = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
+            "# 标题\r\n\r\n这是一段普通的中文段落,应当保持自动换行,不出现横向滚动条。"));
+        T.Ok("plain text stays narrow", plain < 200, "w=" + plain);
+
+        double url = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
+            "看 https://example.com/aaaa/bbbb/cccc/dddd/eeee/ffff/gggg/hhhh/iiii 哈"));
+        T.Ok("long url measured", url > 400, "w=" + url);
+
+        double table = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
+            "| A | B | C | D | E | F |\r\n|:--|:--|:--|:--|:--|:--|\r\n| 很长的内容一 | 很长的内容二 | 很长的内容三 | 很长的内容四 | 很长的内容五 | 很长的内容六 |"));
+        T.Ok("wide table measured", table > 500, "w=" + table);
+
+        double code = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
+            "```\r\nvar x = SomeVeryLongIdentifierName.ThatKeepsGoingAndGoingAndGoing(argumentOne, argumentTwo);\r\n```"));
+        T.Ok("long code line measured", code > 300, "w=" + code);
+
+        double raw = EditableRenderer.GetContentWidth(EditableRenderer.BuildRaw(new string('a', 200)));
+        T.Ok("raw long line measured", raw > 800, "w=" + raw);
+    }
+}
+
 internal static class Program
 {
     [STAThread]
@@ -793,6 +822,7 @@ internal static class Program
         RunGroup("AppInfo", AppInfoTests.Run);
         RunGroup("Settings", SettingsTests.Run);
         RunGroup("Theme", ThemeTests.Run);
+        RunGroup("ContentWidth", ContentWidthTests.Run);
         return T.Report();
     }
 

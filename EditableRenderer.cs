@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -16,6 +17,12 @@ public static class EditableRenderer
     private static readonly Regex BoldRegex = new(@"(\*\*|__)(.+?)(\*\*|__)", RegexOptions.Compiled);
     private static readonly Regex ItalicRegex = new(@"(?<!\*)(\*|_)(?!\*)(.+?)(\*|_)", RegexOptions.Compiled);
     private static readonly Regex CodeRegex = new(@"(`[^`]+`)", RegexOptions.Compiled);
+
+    /// <summary>文档中"不可断行内容"的最大自然宽度(表格/图片/长单词等),用于决定横向滚动范围。</summary>
+    public static readonly DependencyProperty ContentWidthProperty =
+        DependencyProperty.RegisterAttached("ContentWidth", typeof(double), typeof(EditableRenderer), new PropertyMetadata(0.0));
+
+    public static double GetContentWidth(FlowDocument doc) => (double)doc.GetValue(ContentWidthProperty);
 
     public static string ReadSource(FlowDocument doc)
     {
@@ -57,8 +64,114 @@ public static class EditableRenderer
             doc.Blocks.Add(p);
         }
 
+        MeasureContent(doc);
         return doc;
     }
+
+    // ---- 内容自然宽度测量(横向滚动) ----
+
+    private static void MeasureContent(FlowDocument doc)
+    {
+        double max = 0;
+        foreach (var block in doc.Blocks)
+        {
+            double w = MeasureBlock(block);
+            if (w > max) max = w;
+        }
+        doc.SetValue(ContentWidthProperty, max);
+    }
+
+    private static double MeasureBlock(Block block)
+    {
+        if (block is Paragraph p)
+        {
+            double m = 0;
+            foreach (var inline in p.Inlines)
+            {
+                double w = MeasureInline(inline);
+                if (w > m) m = w;
+            }
+            return m + p.Padding.Left + p.Padding.Right + p.BorderThickness.Left + p.BorderThickness.Right;
+        }
+        if (block is Section s)
+        {
+            double m = 0;
+            foreach (var b in s.Blocks) { double w = MeasureBlock(b); if (w > m) m = w; }
+            return m;
+        }
+        if (block is List list)
+        {
+            double m = 0;
+            foreach (var item in list.ListItems)
+            {
+                foreach (var b in item.Blocks) { double w = MeasureBlock(b); if (w > m) m = w; }
+            }
+            return m;
+        }
+        return 0;
+    }
+
+    private static double MeasureInline(Inline inline)
+    {
+        if (inline is InlineUIContainer uic)
+        {
+            if (uic.Child == null) return 0;
+            uic.Child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            return uic.Child.DesiredSize.Width;
+        }
+        if (inline is Span span)
+        {
+            double m = 0;
+            foreach (var child in span.Inlines) { double w = MeasureInline(child); if (w > m) m = w; }
+            return m;
+        }
+        if (inline is Run run && !string.IsNullOrEmpty(run.Text))
+        {
+            var typeface = new Typeface(run.FontFamily, run.FontStyle, run.FontWeight, run.FontStretch);
+            return MaxWordWidth(run.Text, typeface, run.FontSize);
+        }
+        return 0;
+    }
+
+    /// <summary>返回文本中最长"不可断片段"的宽度(空白处与中日韩字符处可断行)。</summary>
+    private static double MaxWordWidth(string text, Typeface typeface, double fontSize)
+    {
+        double max = 0;
+        int i = 0;
+        while (i < text.Length)
+        {
+            if (char.IsWhiteSpace(text[i])) { i++; continue; }
+
+            int start = i;
+            if (IsWideChar(text[i]))
+            {
+                i++;
+            }
+            else
+            {
+                while (i < text.Length && !char.IsWhiteSpace(text[i]) && !IsWideChar(text[i])) i++;
+            }
+
+            int len = i - start;
+            if (len < 4) continue;
+
+            double estimate = len * fontSize * (IsWideChar(text[start]) ? 1.0 : 0.62);
+            if (estimate <= max) continue;
+
+            var ft = new FormattedText(
+                text.Substring(start, len),
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                Brushes.Black,
+                96);
+            if (ft.Width > max) max = ft.Width;
+        }
+        return max;
+    }
+
+    private static bool IsWideChar(char ch) => ch > 0x2E7F;
 
     private static Run Marker(string text, bool preview, RenderTheme t) =>
         preview
@@ -146,6 +259,7 @@ public static class EditableRenderer
             FlushCode(doc, fenceOpen, codeLines, null, preview, theme);
         }
 
+        MeasureContent(doc);
         return doc;
     }
 
