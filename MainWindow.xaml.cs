@@ -601,6 +601,11 @@ public partial class MainWindow : Window
         }
     }
 
+    // 供更新流程调用:返回 false 表示用户取消(中止更新)
+    internal bool ConfirmForUpdate() => ConfirmDiscard();
+
+    internal string? CurrentFilePath => _currentFile;
+
     // 有未保存改动时询问;返回 false 表示用户取消(应中止当前操作)
     private bool ConfirmDiscard()
     {

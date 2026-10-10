@@ -122,6 +122,15 @@ dotnet run --project tests\Zypora.Tests\Zypora.Tests.csproj
 
 点击 **文件 → 导出 PDF**,选择保存位置后生成 A4 版式 PDF,包含标题、正文、列表、引用、代码块等样式。
 
+## 自动更新
+
+启动时**后台检查**新版本;检查失败(超时/连不上/数据异常)**静默跳过**,不影响使用。
+
+- 发现新版本 → 提示「立即更新 / 以后再说」;选择后不再提示该版本
+- 立即更新 = 下载 → SHA-256 校验(可选) → 解压 → 自我替换(`Zypora.exe` → `Zypora.exe.bak` 备份)→ 重启
+- 更新信息来自 `update.json`(主源在 `UpdateConfig.cs` 的 `PrimaryUpdateUrl`,留空则回退 jsDelivr / GitHub raw)
+- 参数 `--no-update-check` 可跳过检查;详细设计与发布流程见 `docs/superpowers/specs/2026-10-10-zypora-update-design.md`
+
 ## 项目结构
 
 | 文件 | 职责 |
@@ -135,6 +144,9 @@ dotnet run --project tests\Zypora.Tests\Zypora.Tests.csproj
 | `DocumentCaret.cs` | 字符级光标映射 |
 | `UndoHistory.cs` / `UndoCoordinator.cs` | 撤销栈与分组策略 |
 | `PdfExporter.cs` | QuestPDF 导出 |
+| `UpdateService.cs` / `UpdateConfig.cs` | 更新检查 / 下载 / 校验 / 自我替换 |
+| `UpdateWindow.xaml(.cs)` | 更新提示与进度窗口 |
+| `update.json` | 更新信息(版本号 / 下载地址),发布新版本时修改 |
 | `tests/Zypora.Tests/` | 断言测试套件(`dotnet run --project tests\Zypora.Tests\Zypora.Tests.csproj`) |
 
 ## 已知限制

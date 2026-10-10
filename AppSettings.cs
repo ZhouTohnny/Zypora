@@ -6,6 +6,9 @@ namespace Zypora;
 public sealed class AppSettings
 {
     public bool DarkMode { get; set; }
+
+    // 用户选择"以后再说"的版本号:该版本不再提示
+    public string? SkippedVersion { get; set; }
 }
 
 public static class SettingsStore

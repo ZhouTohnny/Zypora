@@ -811,6 +811,115 @@ internal static class TableFitTests
     }
 }
 
+internal static class UpdateTests
+{
+    public static void Run()
+    {
+        T.Section("Update");
+
+        // 版本比较
+        T.Ok("newer patch", UpdateService.IsNewer("1.0.3", "1.0.2"));
+        T.Ok("same version", !UpdateService.IsNewer("1.0.2", "1.0.2"));
+        T.Ok("older version", !UpdateService.IsNewer("1.0.1", "1.0.2"));
+        T.Ok("strips build hash", !UpdateService.IsNewer("1.0.2+abc123", "1.0.2"));
+        T.Ok("double digit patch", UpdateService.IsNewer("1.0.10", "1.0.9"));
+        T.Ok("major bump", UpdateService.IsNewer("2.0", "1.9.9"));
+        T.Ok("v prefix", UpdateService.IsNewer("v1.1", "1.0.2"));
+        T.Ok("garbage ignored", !UpdateService.IsNewer("abc", "1.0.2"));
+        T.Ok("empty ignored", !UpdateService.IsNewer("", "1.0.2"));
+
+        // update.json 解析
+        var full = UpdateService.ParseInfo(
+            "{\"version\":\"1.0.3\",\"url\":\"https://a/b.zip\",\"url2\":\"https://c/d.zip\",\"sha256\":\"AB\",\"notes\":\"hi\"}");
+        T.Ok("parse valid", full != null && full.Version == "1.0.3" && full.Url == "https://a/b.zip"
+            && full.Url2 == "https://c/d.zip" && full.Sha256 == "AB" && full.Notes == "hi");
+        T.Ok("parse optional missing", UpdateService.ParseInfo("{\"version\":\"1.0.3\",\"url\":\"https://a/b.zip\"}")
+            is { Url2: null, Sha256: null });
+        T.Ok("parse extra fields", UpdateService.ParseInfo("{\"_comment\":\"x\",\"version\":\"1.0.3\",\"url\":\"https://a/b.zip\"}") != null);
+        T.Ok("parse missing version", UpdateService.ParseInfo("{\"url\":\"https://a/b.zip\"}") == null);
+        T.Ok("parse missing url", UpdateService.ParseInfo("{\"version\":\"1.0.3\"}") == null);
+        T.Ok("parse broken json", UpdateService.ParseInfo("{ oops") == null);
+        T.Ok("parse empty", UpdateService.ParseInfo("") == null);
+        T.Ok("parse non-object", UpdateService.ParseInfo("[1,2]") == null);
+
+        // 候选源顺序
+        var urls = UpdateService.CandidateUrls("https://mine/update.json");
+        T.Ok("primary source first", urls.Count >= 2 && urls[0] == "https://mine/update.json", string.Join("|", urls));
+        T.Ok("fallbacks present", urls.Any(u => u.Contains("jsdelivr")) && urls.Any(u => u.Contains("raw.githubusercontent")));
+        var noPrimary = UpdateService.CandidateUrls("");
+        T.Ok("empty primary filtered", !noPrimary.Contains("https://mine/update.json") && noPrimary.All(u => !string.IsNullOrWhiteSpace(u)));
+
+        // 临时目录名安全(不含路径分隔符)
+        var seg = Path.GetFileName(UpdateService.TempDir("1.0.3/../../evil"));
+        T.Ok("temp dir sanitized", seg.Length > 0 && !seg.Contains('/') && !seg.Contains('\\'), seg);
+
+        // SHA-256 校验
+        var shaDir = Path.Combine(Path.GetTempPath(), "zypora-sha-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(shaDir);
+        var shaFile = Path.Combine(shaDir, "a.txt");
+        File.WriteAllText(shaFile, "hello");
+        var hash = UpdateService.Sha256OfFile(shaFile);
+        T.Ok("sha256 length", hash.Length == 64, hash);
+        T.Ok("sha256 matches upper", UpdateService.VerifySha256(shaFile, hash.ToUpperInvariant()));
+        T.Ok("sha256 mismatch", !UpdateService.VerifySha256(shaFile, new string('0', 64)));
+        T.Ok("sha256 missing file", !UpdateService.VerifySha256(Path.Combine(shaDir, "nope.txt"), hash));
+
+        // 自我替换(全部在临时目录内)
+        var root = Path.Combine(Path.GetTempPath(), "zypora-apply-" + Guid.NewGuid().ToString("N"));
+        var app = Path.Combine(root, "app");
+        var ext = Path.Combine(root, "extract");
+        Directory.CreateDirectory(Path.Combine(app, "assets"));
+        Directory.CreateDirectory(Path.Combine(ext, "LatoFont"));
+        File.WriteAllText(Path.Combine(app, "Zypora.exe"), "old-exe");
+        File.WriteAllText(Path.Combine(app, "assets", "keep.png"), "keep");
+        File.WriteAllText(Path.Combine(app, "user.txt"), "mine");
+        File.WriteAllText(Path.Combine(ext, "Zypora.exe"), "new-exe");
+        File.WriteAllText(Path.Combine(ext, "LatoFont", "lato.txt"), "font");
+        File.WriteAllText(Path.Combine(ext, "使用说明.md"), "doc");
+
+        var applied = UpdateService.ApplyUpdate(app, ext);
+        T.Ok("apply success", applied.Success, applied.Error);
+        T.Eq("exe replaced", "new-exe", File.ReadAllText(Path.Combine(app, "Zypora.exe")));
+        T.Eq("backup has old exe", "old-exe", File.ReadAllText(Path.Combine(app, "Zypora.exe.bak")));
+        T.Eq("font updated", "font", File.ReadAllText(Path.Combine(app, "LatoFont", "lato.txt")));
+        T.Eq("doc updated", "doc", File.ReadAllText(Path.Combine(app, "使用说明.md")));
+        T.Eq("assets preserved", "keep", File.ReadAllText(Path.Combine(app, "assets", "keep.png")));
+        T.Eq("user file preserved", "mine", File.ReadAllText(Path.Combine(app, "user.txt")));
+        T.Ok("no staged file left", !File.Exists(Path.Combine(app, "Zypora.exe.new")));
+
+        File.WriteAllText(Path.Combine(ext, "Zypora.exe"), "newer-exe");
+        var applied2 = UpdateService.ApplyUpdate(app, ext);
+        T.Ok("apply twice", applied2.Success, applied2.Error);
+        T.Eq("second replace", "newer-exe", File.ReadAllText(Path.Combine(app, "Zypora.exe")));
+        T.Eq("backup refreshed", "new-exe", File.ReadAllText(Path.Combine(app, "Zypora.exe.bak")));
+
+        var emptyExtract = Path.Combine(root, "empty");
+        Directory.CreateDirectory(emptyExtract);
+        var bad = UpdateService.ApplyUpdate(app, emptyExtract);
+        T.Ok("apply fails without exe", !bad.Success && bad.Error != null);
+
+        UpdateService.CleanupBackup(app);
+        T.Ok("backup cleaned", !File.Exists(Path.Combine(app, "Zypora.exe.bak")));
+
+        // 命令行参数
+        T.Ok("no-update-check flag", StartupArgs.HasNoUpdateCheck(new[] { "--no-update-check" }));
+        T.Ok("flag case insensitive", StartupArgs.HasNoUpdateCheck(new[] { "--NO-UPDATE-CHECK" }));
+        T.Ok("flag absent by default", !StartupArgs.HasNoUpdateCheck(new[] { "a.md" }));
+
+        // 跳过版本持久化
+        var setDir = Path.Combine(Path.GetTempPath(), "zypora-set-" + Guid.NewGuid().ToString("N"));
+        SettingsStore.Save(setDir, new AppSettings { DarkMode = true, SkippedVersion = "1.0.3" });
+        var loaded = SettingsStore.Load(setDir);
+        T.Ok("settings roundtrip skip", loaded.DarkMode && loaded.SkippedVersion == "1.0.3");
+        SettingsStore.Save(setDir, new AppSettings());
+        T.Ok("settings skip defaults null", SettingsStore.Load(setDir).SkippedVersion == null);
+
+        try { Directory.Delete(root, true); } catch { }
+        try { Directory.Delete(shaDir, true); } catch { }
+        try { Directory.Delete(setDir, true); } catch { }
+    }
+}
+
 internal static class Program
 {
     [STAThread]
@@ -830,6 +939,7 @@ internal static class Program
         RunGroup("Settings", SettingsTests.Run);
         RunGroup("Theme", ThemeTests.Run);
         RunGroup("TableFit", TableFitTests.Run);
+        RunGroup("Update", UpdateTests.Run);
         return T.Report();
     }
 

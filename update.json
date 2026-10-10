@@ -1,0 +1,8 @@
+{
+  "version": "1.0.2",
+  "url": "https://your-domain.example/zypora/Zypora-win-x64.zip",
+  "url2": "https://github.com/ZhouTohnny/Zypora/releases/latest/download/Zypora-win-x64.zip",
+  "sha256": "",
+  "notes": "",
+  "_comment": "发布新版本时:把 version 改成新版本号(必须大于程序当前版本);url 换成国内直链(url 是主下载源);url2 是备下载源;sha256 可选(填了会校验下载包);notes 会显示在更新提示窗口里"
+}

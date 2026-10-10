@@ -20,5 +20,55 @@ public partial class App : Application
             w.OpenFile(files[i]);
             w.Show();
         }
+
+        // 清理上次更新留下的备份
+        UpdateService.CleanupBackup(AppContext.BaseDirectory);
+
+        if (!StartupArgs.HasNoUpdateCheck(e.Args))
+        {
+            _ = Task.Run(() => CheckForUpdatesAsync(main));
+        }
+    }
+
+    /// <summary>后台检查更新:任何失败都静默,不影响使用。</summary>
+    private async Task CheckForUpdatesAsync(Window owner)
+    {
+        UpdateInfo? info;
+        try
+        {
+            info = await UpdateService.CheckAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (info == null || owner.Dispatcher.HasShutdownStarted) return;
+
+        try
+        {
+            owner.Dispatcher.Invoke(() =>
+            {
+                var current = UpdateService.CurrentVersion();
+                if (!UpdateService.IsNewer(info.Version, current)) return;
+
+                var settings = SettingsStore.Load(SettingsStore.DefaultDir);
+                if (string.Equals(settings.SkippedVersion, info.Version, StringComparison.OrdinalIgnoreCase)) return;
+
+                var win = new UpdateWindow(info, AppContext.BaseDirectory, current) { Owner = owner };
+                win.ShowDialog();
+
+                if (win.SkipRequested)
+                {
+                    var s = SettingsStore.Load(SettingsStore.DefaultDir);
+                    s.SkippedVersion = info.Version;
+                    SettingsStore.Save(SettingsStore.DefaultDir, s);
+                }
+            });
+        }
+        catch
+        {
+            // 静默
+        }
     }
 }
