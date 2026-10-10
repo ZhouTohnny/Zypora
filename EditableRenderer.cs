@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -17,12 +16,6 @@ public static class EditableRenderer
     private static readonly Regex BoldRegex = new(@"(\*\*|__)(.+?)(\*\*|__)", RegexOptions.Compiled);
     private static readonly Regex ItalicRegex = new(@"(?<!\*)(\*|_)(?!\*)(.+?)(\*|_)", RegexOptions.Compiled);
     private static readonly Regex CodeRegex = new(@"(`[^`]+`)", RegexOptions.Compiled);
-
-    /// <summary>文档中"不可断行内容"的最大自然宽度(表格/图片/长单词等),用于决定横向滚动范围。</summary>
-    public static readonly DependencyProperty ContentWidthProperty =
-        DependencyProperty.RegisterAttached("ContentWidth", typeof(double), typeof(EditableRenderer), new PropertyMetadata(0.0));
-
-    public static double GetContentWidth(FlowDocument doc) => (double)doc.GetValue(ContentWidthProperty);
 
     public static string ReadSource(FlowDocument doc)
     {
@@ -64,118 +57,80 @@ public static class EditableRenderer
             doc.Blocks.Add(p);
         }
 
-        MeasureContent(doc);
         return doc;
     }
 
-    // ---- 内容自然宽度测量(横向滚动) ----
+    // ---- 宽度自适应:超宽表格按可用宽度缩放,单元格内自动换行 ----
 
-    private static void MeasureContent(FlowDocument doc)
+    /// <summary>内容过宽时按可用宽度等比缩放各列(不低于 40px);放得下则保持自然宽度。</summary>
+    public static double[] FitWidths(double[] natural, double available)
     {
-        double max = 0;
-        foreach (var block in doc.Blocks)
-        {
-            double w = MeasureBlock(block);
-            if (w > max) max = w;
-        }
-        doc.SetValue(ContentWidthProperty, max);
+        double total = 0;
+        foreach (var w in natural) total += w;
+        if (available <= 0 || total <= available) return natural;
+
+        double scale = available / total;
+        var fitted = new double[natural.Length];
+        for (int i = 0; i < natural.Length; i++) fitted[i] = Math.Max(40, natural[i] * scale);
+        return fitted;
     }
 
-    private static double MeasureBlock(Block block)
+    /// <summary>把文档中的表格行与图片按可用宽度重新适配(重渲染或窗口缩放时调用)。</summary>
+    public static void FitContent(FlowDocument doc, double available)
+    {
+        if (available <= 0) return;
+        foreach (var block in doc.Blocks) FitBlock(block, available);
+    }
+
+    private static void FitBlock(Block block, double available)
     {
         if (block is Paragraph p)
         {
-            double m = 0;
-            foreach (var inline in p.Inlines)
-            {
-                double w = MeasureInline(inline);
-                if (w > m) m = w;
-            }
-            return m + p.Padding.Left + p.Padding.Right + p.BorderThickness.Left + p.BorderThickness.Right;
+            foreach (var inline in p.Inlines) FitInline(inline, available);
         }
-        if (block is Section s)
+        else if (block is Section s)
         {
-            double m = 0;
-            foreach (var b in s.Blocks) { double w = MeasureBlock(b); if (w > m) m = w; }
-            return m;
+            foreach (var b in s.Blocks) FitBlock(b, available);
         }
-        if (block is List list)
+        else if (block is List list)
         {
-            double m = 0;
             foreach (var item in list.ListItems)
             {
-                foreach (var b in item.Blocks) { double w = MeasureBlock(b); if (w > m) m = w; }
+                foreach (var b in item.Blocks) FitBlock(b, available);
             }
-            return m;
         }
-        return 0;
     }
 
-    private static double MeasureInline(Inline inline)
+    private static void FitInline(Inline inline, double available)
     {
         if (inline is InlineUIContainer uic)
         {
-            if (uic.Child == null) return 0;
-            uic.Child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return uic.Child.DesiredSize.Width;
-        }
-        if (inline is Span span)
-        {
-            double m = 0;
-            foreach (var child in span.Inlines) { double w = MeasureInline(child); if (w > m) m = w; }
-            return m;
-        }
-        if (inline is Run run && !string.IsNullOrEmpty(run.Text))
-        {
-            var typeface = new Typeface(run.FontFamily, run.FontStyle, run.FontWeight, run.FontStretch);
-            return MaxWordWidth(run.Text, typeface, run.FontSize);
-        }
-        return 0;
-    }
-
-    /// <summary>返回文本中最长"不可断片段"的宽度(空白处与中日韩字符处可断行)。</summary>
-    private static double MaxWordWidth(string text, Typeface typeface, double fontSize)
-    {
-        double max = 0;
-        int i = 0;
-        while (i < text.Length)
-        {
-            if (char.IsWhiteSpace(text[i])) { i++; continue; }
-
-            int start = i;
-            if (IsWideChar(text[i]))
+            if (uic.Child is Border border && border.Tag is double[] natural && border.Child is Grid grid)
             {
-                i++;
+                var fitted = FitWidths(natural, available);
+                for (int i = 0; i < fitted.Length && i < grid.ColumnDefinitions.Count; i++)
+                {
+                    grid.ColumnDefinitions[i].Width = new GridLength(fitted[i]);
+                }
             }
-            else
+            else if (uic.Child is Image img)
             {
-                while (i < text.Length && !char.IsWhiteSpace(text[i]) && !IsWideChar(text[i])) i++;
+                img.MaxWidth = Math.Max(80, Math.Min(640, available));
             }
-
-            int len = i - start;
-            if (len < 4) continue;
-
-            double estimate = len * fontSize * (IsWideChar(text[start]) ? 1.0 : 0.62);
-            if (estimate <= max) continue;
-
-            var ft = new FormattedText(
-                text.Substring(start, len),
-                CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                Brushes.Black,
-                96);
-            if (ft.Width > max) max = ft.Width;
+            else if (uic.Child is Border ph && ph.Child is TextBlock tb)
+            {
+                tb.MaxWidth = Math.Max(80, Math.Min(600, available - 24));
+            }
         }
-        return max;
+        else if (inline is Span span)
+        {
+            foreach (var child in span.Inlines) FitInline(child, available);
+        }
     }
-
-    private static bool IsWideChar(char ch) => ch > 0x2E7F;
 
     private static Run Marker(string text, bool preview, RenderTheme t) =>
         preview
-            ? new Run(text) { Foreground = Brushes.Transparent, FontSize = 1 }
+            ? new Run(text) { Foreground = Brushes.Transparent, FontSize = 0.1 }
             : new Run(text) { Foreground = t.Faint };
 
     private static InlineUIContainer CreateBullet(RenderTheme t)
@@ -259,7 +214,6 @@ public static class EditableRenderer
             FlushCode(doc, fenceOpen, codeLines, null, preview, theme);
         }
 
-        MeasureContent(doc);
         return doc;
     }
 
@@ -307,9 +261,9 @@ public static class EditableRenderer
         {
             int lastSpace = line.LastIndexOf(' ');
             var ip = new Paragraph { Margin = new Thickness(0, 4, 0, 4) };
-            ip.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 1 });
+            ip.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
             ip.Inlines.Add(new InlineUIContainer(BuildImageVisual(imgSrc, docDir, appDir, t)) { BaselineAlignment = BaselineAlignment.Center });
-            ip.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
+            ip.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
             return ip;
         }
 
@@ -355,7 +309,7 @@ public static class EditableRenderer
         if (ul.Success)
         {
             var marker = trimmed.Substring(0, ul.Groups[0].Value.Length);
-            p.Inlines.Add(new Run(marker.Substring(0, marker.Length - 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
+            p.Inlines.Add(new Run(marker.Substring(0, marker.Length - 1)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
             p.Inlines.Add(CreateBullet(t));
             AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview, t);
             return p;
@@ -471,7 +425,7 @@ public static class EditableRenderer
             if (TableParser.IsSeparatorLine(line))
             {
                 var sep = new Paragraph { Margin = new Thickness(0) };
-                sep.Inlines.Add(new Run(line) { Foreground = Brushes.Transparent, FontSize = 1 });
+                sep.Inlines.Add(new Run(line) { Foreground = Brushes.Transparent, FontSize = 0.1 });
                 doc.Blocks.Add(sep);
                 continue;
             }
@@ -488,9 +442,9 @@ public static class EditableRenderer
             var visual = BuildRowVisual(model, cells, widths, header, t);
 
             var p = new Paragraph { Margin = new Thickness(0) };
-            p.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 1 });
+            p.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
             p.Inlines.Add(new InlineUIContainer(visual) { BaselineAlignment = BaselineAlignment.Top });
-            p.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 1 });
+            p.Inlines.Add(new Run(line.Substring(lastSpace + 1)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
             doc.Blocks.Add(p);
         }
     }
@@ -535,6 +489,7 @@ public static class EditableRenderer
             BorderBrush = t.GridLine,
             BorderThickness = new Thickness(1, 1, 0, 0),
             Child = grid,
+            Tag = widths,
         };
     }
 

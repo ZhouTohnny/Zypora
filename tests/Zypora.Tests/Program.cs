@@ -537,7 +537,7 @@ internal static class FeatureTests
 
         var h = (WpfParagraph)EditableRenderer.BuildPreview("# Title").Blocks.FirstBlock!;
         T.Eq("heading font size", 30.0, h.FontSize);
-        T.Ok("heading marker hidden", h.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.FontSize == 1));
+        T.Ok("heading marker hidden", h.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.FontSize > 0 && r.FontSize <= 0.5));
 
         var b = (WpfParagraph)EditableRenderer.BuildPreview("a **bold** b").Blocks.FirstBlock!;
         T.Ok("bold run exists", b.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.FontWeight == FontWeights.Bold));
@@ -775,32 +775,39 @@ internal static class ThemeTests
     }
 }
 
-internal static class ContentWidthTests
+internal static class TableFitTests
 {
     public static void Run()
     {
-        T.Section("ContentWidth");
+        T.Section("TableFit");
 
-        T.Ok("empty doc zero", EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview("")) == 0);
+        var fits = EditableRenderer.FitWidths(new[] { 100.0, 200.0 }, 400);
+        T.Ok("fits keeps natural", fits[0] == 100 && fits[1] == 200, fits[0] + "/" + fits[1]);
 
-        double plain = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
-            "# 标题\r\n\r\n这是一段普通的中文段落,应当保持自动换行,不出现横向滚动条。"));
-        T.Ok("plain text stays narrow", plain < 200, "w=" + plain);
+        var scaled = EditableRenderer.FitWidths(new[] { 600.0, 400.0 }, 500);
+        T.Ok("scaled to available", Math.Abs(scaled[0] + scaled[1] - 500) < 0.01, scaled[0] + "+" + scaled[1]);
+        T.Ok("keeps ratio", Math.Abs(scaled[0] / scaled[1] - 1.5) < 0.001, scaled[0] + "/" + scaled[1]);
 
-        double url = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
-            "看 https://example.com/aaaa/bbbb/cccc/dddd/eeee/ffff/gggg/hhhh/iiii 哈"));
-        T.Ok("long url measured", url > 400, "w=" + url);
+        var tiny = EditableRenderer.FitWidths(new[] { 10000.0, 10.0 }, 100);
+        T.Ok("min column width", tiny[1] >= 40, "w=" + tiny[1]);
 
-        double table = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
-            "| A | B | C | D | E | F |\r\n|:--|:--|:--|:--|:--|:--|\r\n| 很长的内容一 | 很长的内容二 | 很长的内容三 | 很长的内容四 | 很长的内容五 | 很长的内容六 |"));
-        T.Ok("wide table measured", table > 500, "w=" + table);
+        var md = "| A | B | C | D | E | F |\r\n|:--|:--|:--|:--|:--|:--|\r\n| 很长的内容一 | 很长的内容二 | 很长的内容三 | 很长的内容四 | 很长的内容五 | 很长的内容六 |";
+        var doc = EditableRenderer.BuildPreview(md);
+        EditableRenderer.FitContent(doc, 400);
 
-        double code = EditableRenderer.GetContentWidth(EditableRenderer.BuildPreview(
-            "```\r\nvar x = SomeVeryLongIdentifierName.ThatKeepsGoingAndGoingAndGoing(argumentOne, argumentTwo);\r\n```"));
-        T.Ok("long code line measured", code > 300, "w=" + code);
+        var row = doc.Blocks.OfType<WpfParagraph>()
+            .Select(p => (p.Inlines.OfType<WpfUIC>().FirstOrDefault()?.Child) as FrameworkElement)
+            .FirstOrDefault(c => c != null)!;
+        T.Ok("table row visual exists", row != null);
+        row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        T.Ok("row fits available width", row.DesiredSize.Width <= 402, "w=" + row.DesiredSize.Width);
 
-        double raw = EditableRenderer.GetContentWidth(EditableRenderer.BuildRaw(new string('a', 200)));
-        T.Ok("raw long line measured", raw > 800, "w=" + raw);
+        T.Eq("fit keeps identity", md, EditableRenderer.ReadSource(doc));
+
+        var hidden = doc.Blocks.OfType<WpfParagraph>()
+            .SelectMany(p => p.Inlines.OfType<System.Windows.Documents.Run>())
+            .Count(r => r.FontSize > 0 && r.FontSize < 0.5);
+        T.Ok("hidden runs nearly zero width", hidden >= 2, "count=" + hidden);
     }
 }
 
@@ -822,7 +829,7 @@ internal static class Program
         RunGroup("AppInfo", AppInfoTests.Run);
         RunGroup("Settings", SettingsTests.Run);
         RunGroup("Theme", ThemeTests.Run);
-        RunGroup("ContentWidth", ContentWidthTests.Run);
+        RunGroup("TableFit", TableFitTests.Run);
         return T.Report();
     }
 

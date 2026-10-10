@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private ViewMode _mode = ViewMode.Preview;
     private bool _renderQueued;
     private bool _rendering;
+    private double _fitWidth;
 
     private AppSettings _settings = new();
     private bool _dark;
@@ -72,7 +73,17 @@ public partial class MainWindow : Window
         Editor.AllowDrop = true;
         Editor.PreviewDragOver += OnDragOver;
         Editor.PreviewDrop += OnDrop;
-        Editor.SizeChanged += (_, _) => ApplyPageWidth();
+        Editor.SizeChanged += (_, _) =>
+        {
+            if (Math.Abs(Editor.ActualWidth - _fitWidth) < 8) return;
+            _fitWidth = Editor.ActualWidth;
+            FitContentToWidth();
+        };
+        Editor.AddHandler(System.Windows.Controls.ScrollViewer.ScrollChangedEvent,
+            new System.Windows.Controls.ScrollChangedEventHandler((_, e) =>
+            {
+                if (Math.Abs(e.ViewportWidthChange) > 4) FitContentToWidth();
+            }));
 
         _mode = ViewMode.Preview;
         SetDocument(BuildForMode(LoadWelcomeText()));
@@ -99,12 +110,12 @@ public partial class MainWindow : Window
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
-        ApplyPageWidth();
+        FitContentToWidth();
         RefreshDirty();
     }
 
-    /// <summary>内容过宽时给文档设定 PageWidth,让底部出现可拖动的横向滚动条;否则保持自动换行。</summary>
-    private void ApplyPageWidth()
+    /// <summary>把表格/图片按编辑区宽度适配,避免内容超出窗口被裁掉。</summary>
+    private void FitContentToWidth()
     {
         var doc = Editor.Document;
         if (doc == null) return;
@@ -112,19 +123,9 @@ public partial class MainWindow : Window
         double viewport = GetViewportWidth();
         if (viewport <= 50) return; // 布局尚未完成,等 SizeChanged 再处理
 
-        double content = EditableRenderer.GetContentWidth(doc);
-        double target = double.NaN;
-        if (content > 0)
-        {
-            double need = content + doc.PagePadding.Left + doc.PagePadding.Right + 16;
-            if (need > viewport - 1) target = Math.Max(need, viewport);
-        }
-
-        bool curNaN = double.IsNaN(doc.PageWidth);
-        bool tgtNaN = double.IsNaN(target);
-        if (curNaN && tgtNaN) return;
-        if (!curNaN && !tgtNaN && Math.Abs(doc.PageWidth - target) < 0.5) return;
-        doc.PageWidth = target;
+        double available = viewport - doc.PagePadding.Left - doc.PagePadding.Right;
+        if (available < 120) available = 120;
+        EditableRenderer.FitContent(doc, available);
     }
 
     private double GetViewportWidth()

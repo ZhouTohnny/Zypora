@@ -137,7 +137,7 @@
                          AcceptsReturn="True"
                          AcceptsTab="True"
                          VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled"
                          FontFamily="Microsoft YaHei UI"
                          FontSize="16"
                          Padding="40,28"
