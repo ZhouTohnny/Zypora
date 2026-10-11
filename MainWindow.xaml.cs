@@ -41,8 +41,6 @@ public partial class MainWindow : Window
     // ---- 阅读模式状态 ----
     private bool _reading;
     private WindowStyle _styleBeforeReading;
-    private WindowState _stateBeforeReading;
-    private Rect _boundsBeforeReading;
     private Visibility _findBarBeforeReading = Visibility.Collapsed;
 
     private readonly List<(int Start, int Length)> _matches = new();
@@ -559,8 +557,6 @@ public partial class MainWindow : Window
         _reading = true;
 
         _styleBeforeReading = WindowStyle;
-        _stateBeforeReading = WindowState;
-        if (WindowState == WindowState.Normal) _boundsBeforeReading = new Rect(Left, Top, Width, Height);
         _findBarBeforeReading = FindBar.Visibility;
 
         if (_mode != ViewMode.Preview)
@@ -576,7 +572,6 @@ public partial class MainWindow : Window
         ExitReadingButton.Visibility = Visibility.Visible;
 
         WindowStyle = WindowStyle.None;
-        WindowState = WindowState.Maximized;
         Editor.Focus();
     }
 
@@ -588,20 +583,7 @@ public partial class MainWindow : Window
         ExitReadingButton.Visibility = Visibility.Collapsed;
         ToolbarBorder.Visibility = Visibility.Visible;
         FindBar.Visibility = _findBarBeforeReading;
-
-        WindowState = WindowState.Normal;
         WindowStyle = _styleBeforeReading;
-        if (_stateBeforeReading == WindowState.Maximized)
-        {
-            WindowState = WindowState.Maximized;
-        }
-        else if (_boundsBeforeReading.Width > 100)
-        {
-            Left = _boundsBeforeReading.Left;
-            Top = _boundsBeforeReading.Top;
-            Width = _boundsBeforeReading.Width;
-            Height = _boundsBeforeReading.Height;
-        }
 
         Editor.IsReadOnly = false;
         _mode = ViewMode.Preview;
