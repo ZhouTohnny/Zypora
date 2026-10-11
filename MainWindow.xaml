@@ -219,6 +219,9 @@
                          BorderThickness="0"
                          TextChanged="OnTextChanged"/>
 
+            <Border x:Name="ReadingDragArea" Height="36" VerticalAlignment="Top" Background="Transparent"
+                    Visibility="Collapsed" MouseLeftButtonDown="OnReadingDragAreaMouseDown"/>
+
             <Button x:Name="ExitReadingButton" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,12,14,0" Cursor="Hand" Visibility="Collapsed" ToolTip="退出阅读模式 (Esc)"
                     Click="OnExitReading">

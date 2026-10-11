@@ -43,6 +43,8 @@ public partial class MainWindow : Window
     private WindowStyle _styleBeforeReading;
     private ResizeMode _resizeBeforeReading;
     private Visibility _findBarBeforeReading = Visibility.Collapsed;
+    private readonly DispatcherTimer _scrollBarTimer = new() { Interval = TimeSpan.FromSeconds(5) };
+    private System.Windows.Controls.Primitives.ScrollBar? _readingScrollBar;
 
     private readonly List<(int Start, int Length)> _matches = new();
     private int _matchIndex = -1;
@@ -89,7 +91,9 @@ public partial class MainWindow : Window
             new System.Windows.Controls.ScrollChangedEventHandler((_, e) =>
             {
                 if (Math.Abs(e.ViewportWidthChange) > 4) FitContentToWidth();
+                if (_reading && Math.Abs(e.VerticalChange) > 0.01) ShowReadingScrollBarTemporarily();
             }));
+        _scrollBarTimer.Tick += (_, _) => HideReadingScrollBar();
 
         _mode = ViewMode.Preview;
         SetDocument(BuildForMode(LoadWelcomeText()));
@@ -572,6 +576,8 @@ public partial class MainWindow : Window
         FindBar.Visibility = Visibility.Collapsed;
         ToolbarBorder.Visibility = Visibility.Collapsed;
         ExitReadingButton.Visibility = Visibility.Visible;
+        ReadingDragArea.Visibility = Visibility.Visible;
+        InitReadingScrollBar();
 
         // 去掉标题栏与调整边框(NoResize 才会真正没有边框)
         ResizeMode = ResizeMode.NoResize;
@@ -585,6 +591,8 @@ public partial class MainWindow : Window
         _reading = false;
 
         ExitReadingButton.Visibility = Visibility.Collapsed;
+        ReadingDragArea.Visibility = Visibility.Collapsed;
+        ResetReadingScrollBar();
         ToolbarBorder.Visibility = Visibility.Visible;
         FindBar.Visibility = _findBarBeforeReading;
         WindowStyle = _styleBeforeReading;
@@ -595,6 +603,89 @@ public partial class MainWindow : Window
         UpdateModeMenu();
         SetDocument(BuildForMode(GetSourceText()));
         Editor.Focus();
+    }
+
+    // 阅读模式:顶部透明区域按住拖窗(不显示任何视觉元素)
+    private void OnReadingDragAreaMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!_reading) return;
+        try
+        {
+            DragMove();
+        }
+        catch
+        {
+            // 忽略(例如鼠标已释放)
+        }
+        e.Handled = true;
+    }
+
+    // 阅读模式:右侧滚动条平时隐藏,滚动时出现,5 秒无操作后淡出
+    private void InitReadingScrollBar()
+    {
+        Editor.ApplyTemplate();
+        if (Editor.Template?.FindName("PART_ContentHost", Editor) is not System.Windows.Controls.ScrollViewer host) return;
+        host.ApplyTemplate();
+        if (host.Template?.FindName("PART_VerticalScrollBar", host) is not System.Windows.Controls.Primitives.ScrollBar bar) return;
+
+        _readingScrollBar = bar;
+        bar.BeginAnimation(OpacityProperty, null);
+        bar.Opacity = 0;
+        bar.IsHitTestVisible = false;
+        _scrollBarTimer.Stop();
+    }
+
+    private void ShowReadingScrollBarTemporarily()
+    {
+        if (!_reading) return;
+        if (_readingScrollBar == null) InitReadingScrollBar();
+        if (_readingScrollBar == null) return;
+
+        _readingScrollBar.BeginAnimation(OpacityProperty, null);
+        _readingScrollBar.Opacity = 1;
+        _readingScrollBar.IsHitTestVisible = true;
+        _scrollBarTimer.Stop();
+        _scrollBarTimer.Start();
+    }
+
+    private void HideReadingScrollBar()
+    {
+        var bar = _readingScrollBar;
+        if (bar == null) return;
+
+        // 鼠标在滚动条上或正在拖动滑块时保持可见
+        if (bar.IsMouseOver || IsScrollThumbDragging(bar))
+        {
+            _scrollBarTimer.Start();
+            return;
+        }
+
+        var fade = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(300));
+        fade.Completed += (_, _) =>
+        {
+            if (!bar.IsMouseOver && !IsScrollThumbDragging(bar)) bar.IsHitTestVisible = false;
+        };
+        bar.BeginAnimation(OpacityProperty, fade);
+    }
+
+    private static bool IsScrollThumbDragging(System.Windows.Controls.Primitives.ScrollBar bar)
+    {
+        bar.ApplyTemplate();
+        if (bar.Template?.FindName("PART_Track", bar) is System.Windows.Controls.Primitives.Track track && track.Thumb != null)
+        {
+            return track.Thumb.IsDragging;
+        }
+        return false;
+    }
+
+    private void ResetReadingScrollBar()
+    {
+        _scrollBarTimer.Stop();
+        var bar = _readingScrollBar;
+        if (bar == null) return;
+        bar.BeginAnimation(OpacityProperty, null);
+        bar.Opacity = 1;
+        bar.IsHitTestVisible = true;
     }
 
     // ---- File / export ----

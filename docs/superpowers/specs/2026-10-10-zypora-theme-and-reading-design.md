@@ -76,6 +76,8 @@ Text `#2E3B2E`、HeadingFg `#243024`、QuoteFg `#4A5A4A`、QuoteLine `#4E8C5A`�
 4. 视图切到 Preview 渲染(若当前是原生)。
 5. `Editor.IsReadOnly = true`。
 6. 显示右上角 `ExitReadingButton`(Grid 叠加在编辑区之上,右侧 14、顶部 12;30×30 透明按钮,**纯 ✕ 图标(Path),无文字**;默认 `Opacity = 0.4`,鼠标悬停显示底色并变清晰)。
+7. 显示**顶部拖拽区** `ReadingDragArea`(高 36、全宽、`Background=Transparent` → 无任何可见元素;按住 `DragMove()` 拖动窗口;叠放层级在 ✕ 之下)。
+8. 右侧滚动条:`PART_ContentHost`(内层 ScrollViewer)模板中的 `PART_VerticalScrollBar` 初始 `Opacity=0` 且不可点击;滚动(ScrollChanged 且 `VerticalChange != 0`)时恢复为 `1` 并启动 5 秒定时器,超时后 300ms 淡出;鼠标悬停在滚动条上或正在拖动滑块时不隐藏(定时器顺延);退出阅读时恢复常显。
 
 ### 6.2 退出(`ExitReadingMode`)
 
