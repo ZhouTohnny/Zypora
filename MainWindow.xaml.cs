@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     // ---- 阅读模式状态 ----
     private bool _reading;
     private WindowStyle _styleBeforeReading;
+    private ResizeMode _resizeBeforeReading;
     private Visibility _findBarBeforeReading = Visibility.Collapsed;
 
     private readonly List<(int Start, int Length)> _matches = new();
@@ -557,6 +558,7 @@ public partial class MainWindow : Window
         _reading = true;
 
         _styleBeforeReading = WindowStyle;
+        _resizeBeforeReading = ResizeMode;
         _findBarBeforeReading = FindBar.Visibility;
 
         if (_mode != ViewMode.Preview)
@@ -571,6 +573,8 @@ public partial class MainWindow : Window
         ToolbarBorder.Visibility = Visibility.Collapsed;
         ExitReadingButton.Visibility = Visibility.Visible;
 
+        // 去掉标题栏与调整边框(NoResize 才会真正没有边框)
+        ResizeMode = ResizeMode.NoResize;
         WindowStyle = WindowStyle.None;
         Editor.Focus();
     }
@@ -584,6 +588,7 @@ public partial class MainWindow : Window
         ToolbarBorder.Visibility = Visibility.Visible;
         FindBar.Visibility = _findBarBeforeReading;
         WindowStyle = _styleBeforeReading;
+        ResizeMode = _resizeBeforeReading;
 
         Editor.IsReadOnly = false;
         _mode = ViewMode.Preview;

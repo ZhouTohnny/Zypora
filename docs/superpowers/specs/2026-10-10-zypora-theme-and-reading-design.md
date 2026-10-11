@@ -71,7 +71,7 @@ Text `#2E3B2E`、HeadingFg `#243024`、QuoteFg `#4A5A4A`、QuoteLine `#4E8C5A`�
 ### 6.1 进入(`EnterReadingMode`)
 
 1. 记录:进入前的 `WindowStyle` 与查找栏可见性。
-2. `WindowStyle = None`(**窗口保持当前大小与位置,不最大化**)。
+2. `ResizeMode = NoResize` 后再 `WindowStyle = None`(**必须同时去掉调整边框,否则窗口仍保留 7px 的 WS_THICKFRAME 边框**);窗口保持当前大小与位置,不最大化。
 3. 隐藏工具栏 Border(命名为 `ToolbarBorder`)与查找栏。
 4. 视图切到 Preview 渲染(若当前是原生)。
 5. `Editor.IsReadOnly = true`。
