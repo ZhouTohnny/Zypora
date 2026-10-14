@@ -32,11 +32,12 @@
   "url":  "https://国内直链/zypora/Zypora-win-x64.zip",
   "url2": "https://github.com/ZhouTohnny/Zypora/releases/download/v1.0.3/Zypora-win-x64.zip",
   "sha256": "可选;填了则校验下载包",
-  "notes": "可选;一句话更新说明"
+  "notes": "可选;一句话更新说明(显示在更新提示窗口)",
+  "changelog": "可选;多行变更说明(显示在更新完成后的提示窗口,未填则用 notes)"
 }
 ```
 
-- `version`、`url` 必填;`url2`、`sha256`、`notes` 可选。
+- `version`、`url` 必填;`url2`、`sha256`、`notes`、`changelog` 可选。
 - 仓库根目录维护一份 `update.json`(作为 jsDelivr/GitHub 备源)。
 
 ## 4. 检查流程
@@ -75,13 +76,20 @@
    2. `Zypora.exe` → `Zypora.exe.bak`(若 `.bak` 已存在则先删除;删不掉则中止并提示)
    3. `Zypora.exe.new` → `Zypora.exe`
    4. 覆盖复制 `LatoFont\`、`使用说明.md`(这些文件未被锁定;**不动 `assets\` 与用户文件**)
-   5. 启动新 `Zypora.exe`(带当前打开的文件路径,若有)
+   5. **写入"本次更新了什么"**:`%APPDATA%\Zypora\pending-update.json` = `{version, text}`(`text` 取 `update.json` 的 `changelog`,缺省用 `notes`)
+   6. 启动新 `Zypora.exe`(带当前打开的文件路径,若有)
    6. 退出当前进程
 5. **回滚**:第 4 步任一子步骤失败 → 尽力把 `.bak` 改回 `Zypora.exe`,删除 `Zypora.exe.new`,提示「更新失败」,程序继续可用。
 6. **启动清理**:每次启动时若发现 `Zypora.exe.bak`,尝试删除(失败则忽略,说明有另一个实例在运行)。
 
-## 7. 失败提示边界
+## 7. 更新完成后的提示
 
+- 替换文件前,旧版本把 `{version, text}` 写入 `%APPDATA%\Zypora\pending-update.json`(`text` = `update.json` 的 `changelog`,缺省 `notes`)。
+- 新版本启动时 `ConsumePendingInfo` 读取并**立即删除**该文件;成功则弹出 `WhatsNewWindow`(标题「更新完成」,主标题「已更新到 vX.Y.Z」,正文为变更说明,底部「知道了」)。
+- 窗口按当前主题配色;显示后手动居中于主窗口并保证不越出屏幕(启动阶段 `CenterOwner` 可能算错位置)。
+- 整个过程包在 try/catch 中,**失败不影响启动**;文件只消费一次。
+
+## 8. 失败提示边界
 | 场景 | 行为 |
 | --- | --- |
 | 启动检查失败(超时/连不上/JSON 损坏) | **完全静默** |
@@ -89,7 +97,7 @@
 | 校验失败 / 解压失败 / 目录不可写 | 提示「更新失败:<简短原因>」,程序继续正常运行 |
 | 用户点「取消」 | 中止下载、清理临时文件,不打扰 |
 
-## 8. 代码结构
+## 9. 代码结构
 
 | 文件 | 职责 |
 | --- | --- |
@@ -109,7 +117,7 @@ IReadOnlyList<string> UpdateService.CandidateUrls(string primary);
 ApplyResult UpdateService.ApplyUpdate(string appDir, string extractDir, ...); // 可注入路径,便于在临时目录测试
 ```
 
-## 9. 测试计划(加入 tests/Zypora.Tests)
+## 10. 测试计划(加入 tests/Zypora.Tests)
 
 - 版本比较:`1.0.3 > 1.0.2`、`1.0.2 == 1.0.2`、`1.0.2+abc` 视为 `1.0.2`、`1.0.10 > 1.0.9`、`2.0 > 1.9.9`、非法串 → 不提示
 - `update.json` 解析:合法 / 缺 `version` / 缺 `url` / 空串 / 损坏 JSON / `notes` 可选
@@ -120,7 +128,7 @@ ApplyResult UpdateService.ApplyUpdate(string appDir, string extractDir, ...); //
   - 失败回滚:目标 exe 不可改名时保持原样并返回失败
 - `--no-update-check` 参数解析
 
-## 10. 开发者发布新版本流程
+## 11. 开发者发布新版本流程
 
 1. 修改 `Zypora.csproj` 的 `<Version>`
 2. `dotnet publish ...` 打包并压成 `dist\Zypora-win-x64.zip`
@@ -128,7 +136,7 @@ ApplyResult UpdateService.ApplyUpdate(string appDir, string extractDir, ...); //
 4. 更新仓库 `update.json` 的 `version` / `url` / `sha256` / `notes`(jsDelivr 有缓存,主源才是实时的)
 5. (可选)发 GitHub Release,填 `url2`
 
-## 11. 风险与限制
+## 12. 风险与限制
 
 - 国内网络:主源可用性由用户保证;jsDelivr 有缓存(可能延迟数小时);GitHub raw 基本不通。
 - 若程序放在无写权限目录(如 `Program Files`),更新会失败并提示;当前分发方式为自解压 zip,默认有写权限。

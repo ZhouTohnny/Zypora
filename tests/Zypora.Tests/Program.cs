@@ -958,6 +958,32 @@ internal static class UpdateTests
         SettingsStore.Save(setDir, new AppSettings());
         T.Ok("settings skip defaults null", SettingsStore.Load(setDir).SkippedVersion == null);
 
+        // 更新完成提示:changelog 解析与优先级
+        var withChangelog = UpdateService.ParseInfo(
+            "{\"version\":\"1.1.2\",\"url\":\"https://a/b.zip\",\"changelog\":\"新增 A\\n修复 B\",\"notes\":\"简述\"}");
+        T.Ok("parse changelog", withChangelog?.Changelog == "新增 A\n修复 B", withChangelog?.Changelog);
+        T.Ok("changelog preferred", withChangelog?.ChangelogOrNotes == "新增 A\n修复 B");
+        var notesOnly = UpdateService.ParseInfo("{\"version\":\"1.1.2\",\"url\":\"https://a/b.zip\",\"notes\":\"简述\"}");
+        T.Ok("changelog falls back to notes", notesOnly?.ChangelogOrNotes == "简述");
+        var neither = UpdateService.ParseInfo("{\"version\":\"1.1.2\",\"url\":\"https://a/b.zip\"}");
+        T.Ok("no notes/changelog yields null", neither != null && neither.ChangelogOrNotes == null);
+
+        // 更新完成提示:待读文件往返
+        var pendDir = Path.Combine(Path.GetTempPath(), "zypora-pend-" + Guid.NewGuid().ToString("N"));
+        T.Ok("pending missing is null", UpdateService.ConsumePendingInfo(pendDir) == null);
+        UpdateService.WritePendingInfo(pendDir, "1.1.2", "新增:主题\n修复:菜单");
+        T.Ok("pending file written", File.Exists(UpdateService.PendingInfoPath(pendDir)));
+        var pend = UpdateService.ConsumePendingInfo(pendDir);
+        T.Ok("pending consumed", pend != null && pend.Version == "1.1.2" && pend.Text == "新增:主题\n修复:菜单", pend?.Text);
+        T.Ok("pending file deleted after consume", !File.Exists(UpdateService.PendingInfoPath(pendDir)));
+        T.Ok("pending consumed once", UpdateService.ConsumePendingInfo(pendDir) == null);
+
+        File.WriteAllText(UpdateService.PendingInfoPath(pendDir), "{ broken");
+        T.Ok("pending corrupt is null", UpdateService.ConsumePendingInfo(pendDir) == null);
+        T.Ok("pending corrupt file removed", !File.Exists(UpdateService.PendingInfoPath(pendDir)));
+
+        try { Directory.Delete(pendDir, true); } catch { }
+
         try { Directory.Delete(root, true); } catch { }
         try { Directory.Delete(shaDir, true); } catch { }
         try { Directory.Delete(setDir, true); } catch { }

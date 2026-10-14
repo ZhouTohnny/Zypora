@@ -79,6 +79,9 @@ public partial class UpdateWindow : Window
                 return;
             }
 
+            // 记录本次更新内容,新版本首次启动时提示
+            UpdateService.WritePendingInfo(SettingsStore.DefaultDir, _info.Version, _info.ChangelogOrNotes);
+
             UpdateService.StartNewVersion(_appDir, CurrentOpenFile);
             Application.Current.Shutdown();
         }

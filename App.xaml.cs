@@ -24,6 +24,22 @@ public partial class App : Application
         // 清理上次更新留下的备份
         UpdateService.CleanupBackup(AppContext.BaseDirectory);
 
+        // 若刚通过程序内更新升级,提示本次更新内容(失败不影响使用)
+        try
+        {
+            var pending = UpdateService.ConsumePendingInfo(SettingsStore.DefaultDir);
+            if (pending != null)
+            {
+                var settings = SettingsStore.Load(SettingsStore.DefaultDir);
+                var whatsNew = new WhatsNewWindow(pending, settings.ResolveTheme()) { Owner = main };
+                whatsNew.ShowDialog();
+            }
+        }
+        catch
+        {
+            // 静默
+        }
+
         if (!StartupArgs.HasNoUpdateCheck(e.Args))
         {
             _ = Task.Run(() => CheckForUpdatesAsync(main));

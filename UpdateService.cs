@@ -15,7 +15,14 @@ public sealed class UpdateInfo
     public string? Url2 { get; init; }
     public string? Sha256 { get; init; }
     public string? Notes { get; init; }
+    public string? Changelog { get; init; }
+
+    /// <summary>更新完成后弹窗用的文本:优先 changelog,其次 notes。</summary>
+    public string? ChangelogOrNotes => string.IsNullOrWhiteSpace(Changelog) ? Notes : Changelog;
 }
+
+/// <summary>上一版本在替换文件前写入的"本次更新了什么",由新版本首次启动时读取并删除。</summary>
+public sealed record PendingUpdate(string Version, string? Text);
 
 public sealed class UpdateApplyResult
 {
@@ -88,6 +95,7 @@ public static class UpdateService
 
             var url2 = Get("url2");
             var sha = Get("sha256");
+            var changelog = Get("changelog");
             return new UpdateInfo
             {
                 Version = version!.Trim(),
@@ -95,6 +103,7 @@ public static class UpdateService
                 Url2 = string.IsNullOrWhiteSpace(url2) ? null : url2!.Trim(),
                 Sha256 = string.IsNullOrWhiteSpace(sha) ? null : sha!.Trim(),
                 Notes = Get("notes"),
+                Changelog = string.IsNullOrWhiteSpace(changelog) ? null : changelog,
             };
         }
         catch
@@ -364,6 +373,58 @@ public static class UpdateService
         catch
         {
             // 启动失败:用户可手动打开
+        }
+    }
+
+    // ---- 更新完成提示(跨版本传递变更说明) ----
+
+    public const string PendingInfoFileName = "pending-update.json";
+
+    public static string PendingInfoPath(string dir) => Path.Combine(dir, PendingInfoFileName);
+
+    public static void WritePendingInfo(string dir, string version, string? text)
+    {
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var json = JsonSerializer.Serialize(new Dictionary<string, string?>
+            {
+                ["version"] = version,
+                ["text"] = text,
+            });
+            File.WriteAllText(PendingInfoPath(dir), json);
+        }
+        catch
+        {
+            // 忽略:写不进去就不提示
+        }
+    }
+
+    /// <summary>读取并删除待提示信息;不存在或损坏返回 null。</summary>
+    public static PendingUpdate? ConsumePendingInfo(string dir)
+    {
+        var path = PendingInfoPath(dir);
+        try
+        {
+            if (!File.Exists(path)) return null;
+            var json = File.ReadAllText(path);
+            TryDelete(path);
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            string? Get(string name) =>
+                root.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+
+            var version = Get("version");
+            if (string.IsNullOrWhiteSpace(version)) return null;
+            return new PendingUpdate(version!.Trim(), Get("text"));
+        }
+        catch
+        {
+            TryDelete(path);
+            return null;
         }
     }
 
