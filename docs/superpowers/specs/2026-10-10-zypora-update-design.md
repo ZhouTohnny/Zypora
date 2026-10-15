@@ -24,6 +24,8 @@
 2. **jsDelivr**:`https://cdn.jsdelivr.net/gh/ZhouTohnny/Zypora@main/update.json`
 3. **GitHub raw**(兜底,国内基本不通,无害):`https://raw.githubusercontent.com/ZhouTohnny/Zypora/main/update.json`
 
+另外**同时查询 GitHub Releases API**(`UpdateConfig.ReleasesApiUrl`,`releases/latest`):解析 `tag_name`(去掉前导 `v`)、资产 `Zypora-win-x64.zip` 的 `browser_download_url` 与 `digest`(sha256)、以及 Release 正文作为 `changelog`;**两个来源取版本更高的那个**。这样在 GitHub 上发了带附件的 Release 就能被自动发现,无需再改 `update.json`;未带附件的 Release、draft、prerelease、接口失败一律忽略(静默)。
+
 `update.json` 格式:
 
 ```json

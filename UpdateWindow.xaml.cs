@@ -19,7 +19,7 @@ public partial class UpdateWindow : Window
         HeadlineText.Text = $"发现新版本 v{info.Version}(当前 v{currentVersion})";
         if (string.IsNullOrWhiteSpace(info.Notes))
         {
-            NotesText.Visibility = Visibility.Collapsed;
+            NotesBox.Visibility = Visibility.Collapsed;
         }
         else
         {

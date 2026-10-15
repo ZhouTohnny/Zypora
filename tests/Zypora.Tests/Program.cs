@@ -708,10 +708,10 @@ internal static class AppInfoTests
         T.Section("App info");
         var asm = typeof(Zypora.MainWindow).Assembly;
         var ver = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        T.Ok("app version is 1.1.2", ver != null && ver.StartsWith("1.1.2"), "ver=" + ver);
+        T.Ok("app version is 1.1.3", ver != null && ver.StartsWith("1.1.3"), "ver=" + ver);
 
-        T.Eq("version suffix strips hash", " v1.1.2", AppInfo.VersionSuffix("1.1.2+bcf662f"));
-        T.Eq("version suffix plain", " v1.1.2", AppInfo.VersionSuffix("1.1.2"));
+        T.Eq("version suffix strips hash", " v1.1.3", AppInfo.VersionSuffix("1.1.3+bcf662f"));
+        T.Eq("version suffix plain", " v1.1.3", AppInfo.VersionSuffix("1.1.3"));
         T.Eq("version suffix empty", "", AppInfo.VersionSuffix(""));
         T.Eq("version suffix null", "", AppInfo.VersionSuffix(null));
 
@@ -981,6 +981,27 @@ internal static class UpdateTests
         File.WriteAllText(UpdateService.PendingInfoPath(pendDir), "{ broken");
         T.Ok("pending corrupt is null", UpdateService.ConsumePendingInfo(pendDir) == null);
         T.Ok("pending corrupt file removed", !File.Exists(UpdateService.PendingInfoPath(pendDir)));
+
+        // GitHub Release 解析(自动跟随最新 Release)
+        var rel = UpdateService.ParseRelease(
+            "{\"tag_name\":\"v1.1.3\",\"draft\":false,\"prerelease\":false,\"body\":\"新增 A\\n修复 B\",\"assets\":[" +
+            "{\"name\":\"Zypora-win-x64.zip\",\"browser_download_url\":\"https://github.com/x/y/releases/download/v1.1.3/Zypora-win-x64.zip\",\"digest\":\"sha256:abc123\"}]}");
+        T.Ok("release parsed", rel != null && rel.Version == "1.1.3", rel?.Version);
+        T.Ok("release url", rel?.Url.EndsWith("Zypora-win-x64.zip") == true, rel?.Url);
+        T.Ok("release sha from digest", rel?.Sha256 == "abc123", rel?.Sha256);
+        T.Ok("release body as changelog", rel?.Changelog == "新增 A\n修复 B", rel?.Changelog);
+
+        var relNoAsset = UpdateService.ParseRelease("{\"tag_name\":\"v1.1.3\",\"assets\":[]}");
+        T.Ok("release without asset ignored", relNoAsset == null);
+        var relDraft = UpdateService.ParseRelease("{\"tag_name\":\"v1.1.4\",\"draft\":true,\"assets\":[{\"name\":\"Zypora-win-x64.zip\",\"browser_download_url\":\"https://a/b.zip\"}]}");
+        T.Ok("draft ignored", relDraft == null);
+        var relPre = UpdateService.ParseRelease("{\"tag_name\":\"v1.2.0\",\"prerelease\":true,\"assets\":[{\"name\":\"Zypora-win-x64.zip\",\"browser_download_url\":\"https://a/b.zip\"}]}");
+        T.Ok("prerelease ignored", relPre == null);
+        T.Ok("release broken json", UpdateService.ParseRelease("{ oops") == null);
+        T.Ok("release no tag", UpdateService.ParseRelease("{\"assets\":[]}") == null);
+        var relNoDigest = UpdateService.ParseRelease("{\"tag_name\":\"v2.0\",\"assets\":[{\"name\":\"Zypora-win-x64.zip\",\"browser_download_url\":\"https://a/b.zip\"}]}");
+        T.Ok("release without digest ok", relNoDigest != null && relNoDigest.Sha256 == null && relNoDigest.Changelog == null, relNoDigest?.Sha256);
+        T.Ok("release tag without v", UpdateService.ParseRelease("{\"tag_name\":\"1.1.3\",\"assets\":[{\"name\":\"Zypora-win-x64.zip\",\"browser_download_url\":\"https://a/b.zip\"}]}")?.Version == "1.1.3");
 
         try { Directory.Delete(pendDir, true); } catch { }
 

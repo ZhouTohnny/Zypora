@@ -130,6 +130,19 @@ public static class UpdateService
 
     public static async Task<UpdateInfo?> CheckAsync(string? primary = null, CancellationToken ct = default)
     {
+        var fromJson = await CheckJsonAsync(primary, ct).ConfigureAwait(false);
+        var fromRelease = await CheckLatestReleaseAsync(ct).ConfigureAwait(false);
+
+        // 两个来源取版本更高的那个(GitHub 上发了新 Release 就能自动跟上)
+        if (fromRelease != null && (fromJson == null || IsNewer(fromRelease.Version, fromJson.Version)))
+        {
+            return fromRelease;
+        }
+        return fromJson;
+    }
+
+    private static async Task<UpdateInfo?> CheckJsonAsync(string? primary, CancellationToken ct)
+    {
         foreach (var url in CandidateUrls(primary))
         {
             try
@@ -148,6 +161,92 @@ public static class UpdateService
             }
         }
         return null;
+    }
+
+    /// <summary>GitHub Releases API:取最新 Release(失败静默返回 null)。</summary>
+    public static async Task<UpdateInfo?> CheckLatestReleaseAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(UpdateConfig.CheckTimeout);
+            using var req = new HttpRequestMessage(HttpMethod.Get, UpdateConfig.ReleasesApiUrl);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Zypora-update-check");
+            req.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+            using var resp = await Http.SendAsync(req, cts.Token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            var json = await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            return ParseRelease(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>解析 GitHub Releases API 的 release JSON(纯函数,便于单测)。</summary>
+    public static UpdateInfo? ParseRelease(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (root.TryGetProperty("draft", out var dr) && dr.ValueKind == JsonValueKind.True) return null;
+            if (root.TryGetProperty("prerelease", out var pr) && pr.ValueKind == JsonValueKind.True) return null;
+
+            string? Get(string name) =>
+                root.TryGetProperty(name, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+
+            var tag = Get("tag_name");
+            if (string.IsNullOrWhiteSpace(tag)) return null;
+            var version = tag!.Trim().TrimStart('v', 'V');
+
+            // 找更新包资产(没附件就提示不了,直接放弃)
+            string? url = null;
+            string? sha = null;
+            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    if (asset.ValueKind != JsonValueKind.Object) continue;
+                    var name = asset.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+                    if (!string.Equals(name, ZipName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    url = asset.TryGetProperty("browser_download_url", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null;
+                    var digest = asset.TryGetProperty("digest", out var dg) && dg.ValueKind == JsonValueKind.String ? dg.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(digest))
+                    {
+                        var d = digest!.Trim();
+                        sha = d.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? d.Substring(7) : d;
+                    }
+                    break;
+                }
+            }
+            if (string.IsNullOrWhiteSpace(url)) return null;
+
+            var body = Get("body");
+            return new UpdateInfo
+            {
+                Version = version,
+                Url = url!.Trim(),
+                Sha256 = string.IsNullOrWhiteSpace(sha) ? null : sha.Trim(),
+                Notes = Shorten(body, 200),
+                Changelog = string.IsNullOrWhiteSpace(body) ? null : body!.Trim(),
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? Shorten(string? text, int max)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var t = text.Trim();
+        return t.Length <= max ? t : t.Substring(0, max) + "…";
     }
 
     // ---- 下载 / 校验 / 解压 ----

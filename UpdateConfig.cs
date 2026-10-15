@@ -14,6 +14,10 @@ public static class UpdateConfig
     // 备源 2:GitHub raw(国内通常不通,仅作兜底)
     public const string GitHubRawUpdateUrl = "https://raw.githubusercontent.com/ZhouTohnny/Zypora/main/update.json";
 
+    // GitHub Releases API:取"最新 Release"(需带 Zypora-win-x64.zip 资产);
+    // 有它就能自动跟随 GitHub 上发的 Release,不必每次改 update.json
+    public const string ReleasesApiUrl = "https://api.github.com/repos/ZhouTohnny/Zypora/releases/latest";
+
     // 启动检查:每个源最多等待 5 秒
     public static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(5);
 
