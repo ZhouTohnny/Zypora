@@ -576,11 +576,18 @@ public partial class MainWindow : Window
         FindBar.Visibility = Visibility.Collapsed;
         ToolbarBorder.Visibility = Visibility.Collapsed;
         ExitReadingButton.Visibility = Visibility.Visible;
-        ReadingDragArea.Visibility = Visibility.Visible;
         InitReadingScrollBar();
 
-        // 去掉标题栏与调整边框(NoResize 才会真正没有边框)
-        ResizeMode = ResizeMode.NoResize;
+        // 无边框 + 顶部按住可拖动 + 边缘可拖动调整大小(用 WindowChrome,不画任何边框)
+        ResizeMode = ResizeMode.CanResize;
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome
+        {
+            CaptionHeight = 36,
+            ResizeBorderThickness = new Thickness(6),
+            GlassFrameThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(0),
+            UseAeroCaptionButtons = false,
+        });
         WindowStyle = WindowStyle.None;
         Editor.Focus();
     }
@@ -591,10 +598,10 @@ public partial class MainWindow : Window
         _reading = false;
 
         ExitReadingButton.Visibility = Visibility.Collapsed;
-        ReadingDragArea.Visibility = Visibility.Collapsed;
         ResetReadingScrollBar();
         ToolbarBorder.Visibility = Visibility.Visible;
-        FindBar.Visibility = _findBarBeforeReading;
+
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, null);
         WindowStyle = _styleBeforeReading;
         ResizeMode = _resizeBeforeReading;
 
@@ -603,21 +610,6 @@ public partial class MainWindow : Window
         UpdateModeMenu();
         SetDocument(BuildForMode(GetSourceText()));
         Editor.Focus();
-    }
-
-    // 阅读模式:顶部透明区域按住拖窗(不显示任何视觉元素)
-    private void OnReadingDragAreaMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (!_reading) return;
-        try
-        {
-            DragMove();
-        }
-        catch
-        {
-            // 忽略(例如鼠标已释放)
-        }
-        e.Handled = true;
     }
 
     // 阅读模式:右侧滚动条平时隐藏,滚动时出现,5 秒无操作后淡出

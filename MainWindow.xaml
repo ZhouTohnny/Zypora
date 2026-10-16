@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Zypora"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="Zypora" Height="720" Width="1080"
         WindowStartupLocation="CenterScreen"
@@ -219,11 +220,9 @@
                          BorderThickness="0"
                          TextChanged="OnTextChanged"/>
 
-            <Border x:Name="ReadingDragArea" Height="36" VerticalAlignment="Top" Background="Transparent"
-                    Visibility="Collapsed" MouseLeftButtonDown="OnReadingDragAreaMouseDown"/>
-
             <Button x:Name="ExitReadingButton" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,12,14,0" Cursor="Hand" Visibility="Collapsed" ToolTip="退出阅读模式 (Esc)"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Click="OnExitReading">
                 <Button.Style>
                     <Style TargetType="Button">

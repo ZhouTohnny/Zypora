@@ -71,12 +71,12 @@ Text `#2E3B2E`、HeadingFg `#243024`、QuoteFg `#4A5A4A`、QuoteLine `#4E8C5A`�
 ### 6.1 进入(`EnterReadingMode`)
 
 1. 记录:进入前的 `WindowStyle` 与查找栏可见性。
-2. `ResizeMode = NoResize` 后再 `WindowStyle = None`(**必须同时去掉调整边框,否则窗口仍保留 7px 的 WS_THICKFRAME 边框**);窗口保持当前大小与位置,不最大化。
+2. `ResizeMode = CanResize`,并应用 **`WindowChrome`**(`CaptionHeight = 36`、`ResizeBorderThickness = 6`、`GlassFrameThickness = 0`、`CornerRadius = 0`)后再 `WindowStyle = None`:窗口完全无边框(DWM/非客户区都不画),但**顶部 36px 为标题区(可拖动)、四边 6px 可拖动调整大小**。
 3. 隐藏工具栏 Border(命名为 `ToolbarBorder`)与查找栏。
 4. 视图切到 Preview 渲染(若当前是原生)。
 5. `Editor.IsReadOnly = true`。
 6. 显示右上角 `ExitReadingButton`(Grid 叠加在编辑区之上,右侧 14、顶部 12;30×30 透明按钮,**纯 ✕ 图标(Path),无文字**;默认 `Opacity = 0.4`,鼠标悬停显示底色并变清晰)。
-7. 显示**顶部拖拽区** `ReadingDragArea`(高 36、全宽、`Background=Transparent` → 无任何可见元素;按住 `DragMove()` 拖动窗口;叠放层级在 ✕ 之下)。
+7. 拖动窗口由 `WindowChrome` 的标题区提供(顶部 36px,界面无任何可见元素);右上角 ✕ 通过 `WindowChrome.IsHitTestVisibleInChrome="True"` 才能在标题区内点击。
 8. 右侧滚动条:`PART_ContentHost`(内层 ScrollViewer)模板中的 `PART_VerticalScrollBar` 初始 `Opacity=0` 且不可点击;滚动(ScrollChanged 且 `VerticalChange != 0`)时恢复为 `1` 并启动 5 秒定时器,超时后 300ms 淡出;鼠标悬停在滚动条上或正在拖动滑块时不隐藏(定时器顺延);退出阅读时恢复常显。
 
 ### 6.2 退出(`ExitReadingMode`)
