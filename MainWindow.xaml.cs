@@ -601,9 +601,12 @@ public partial class MainWindow : Window
         ResetReadingScrollBar();
         ToolbarBorder.Visibility = Visibility.Visible;
 
-        System.Windows.Shell.WindowChrome.SetWindowChrome(this, null);
+        // 顺序很关键:必须先恢复 WindowStyle/ResizeMode,再清除 WindowChrome。
+        // 反过来的话,WPF 会在窗口还是 None 样式时清理圆角区域,之后恢复样式又把
+        // DWM 外框状态搞脏 —— 表现为退出阅读模式后标题栏退化成"经典"灰蓝外框。
         WindowStyle = _styleBeforeReading;
         ResizeMode = _resizeBeforeReading;
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, null);
 
         Editor.IsReadOnly = false;
         _mode = ViewMode.Preview;
