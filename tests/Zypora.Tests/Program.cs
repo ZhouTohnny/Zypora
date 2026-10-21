@@ -428,6 +428,50 @@ internal static class UndoTests
     }
 }
 
+internal static class ClearTests
+{
+    private static string Show((string Text, int Caret)? s) => s == null ? "<null>" : $"{s.Value.Text}@{s.Value.Caret}";
+
+    public static void Run()
+    {
+        T.Section("ClearPolicy");
+        T.Ok("clear: empty no confirm", !ClearPolicy.NeedsConfirm("", "# 欢迎使用"));
+        T.Ok("clear: whitespace no confirm", !ClearPolicy.NeedsConfirm("  \r\n\t", "# 欢迎使用"));
+        T.Ok("clear: default content no confirm", !ClearPolicy.NeedsConfirm("# 欢迎使用", "# 欢迎使用"));
+        T.Ok("clear: edited content confirms", ClearPolicy.NeedsConfirm("# 欢迎使用!", "# 欢迎使用"));
+        T.Ok("clear: arbitrary content confirms", ClearPolicy.NeedsConfirm("hello", "# 欢迎使用"));
+
+        T.Section("Clear undo");
+
+        // 与 MainWindow.ClearDocument 一致:先记录清空前原文,再记录清空后的空状态
+        var c = new UndoCoordinator();
+        c.Reset("old", 3);
+        c.Command("old", 3);
+        c.Change("", 0);
+        c.Commit();
+        T.Eq("clear undo restores source", "old@3", Show(c.Undo("", 0)));
+        T.Eq("clear redo empties", "@0", Show(c.Redo()));
+
+        // 清空后继续输入:第一次撤销回到空,第二次回到清空前
+        var d = new UndoCoordinator();
+        d.Reset("old", 3);
+        d.Command("old", 3);
+        d.Change("", 0);
+        d.Commit();
+        d.Change("x", 1);
+        d.Commit();
+        T.Eq("type after clear undo1", "@0", Show(d.Undo("x", 1)));
+        T.Eq("type after clear undo2", "old@3", Show(d.Undo("", 0)));
+
+        // 清空已经是空的文档不产生撤销步骤
+        var e = new UndoCoordinator();
+        e.Reset("", 0);
+        e.Change("", 0);
+        e.Commit();
+        T.Ok("clear empty adds no step", !e.CanUndo);
+    }
+}
+
 internal static class InlineTests
 {
     public static void Run()
@@ -1020,6 +1064,7 @@ internal static class Program
         RunGroup("TableParser", TableTests.Run);
         RunGroup("Renderer", RendererTests.Run);
         RunGroup("Undo", UndoTests.Run);
+        RunGroup("Clear", ClearTests.Run);
         RunGroup("InlineEditor", InlineTests.Run);
         RunGroup("LineEditor", LineTests.Run);
         RunGroup("DocumentCaret", CaretTests.Run);

@@ -24,6 +24,7 @@ public partial class MainWindow : Window
 
     private string? _currentFile;
     private string _savedText = "";
+    private string _welcomeText = "";
     private bool _dirty;
     private readonly DispatcherTimer _renderTimer = new();
     private readonly DispatcherTimer _groupTimer = new();
@@ -98,6 +99,7 @@ public partial class MainWindow : Window
         _mode = ViewMode.Preview;
         SetDocument(BuildForMode(LoadWelcomeText()));
         _savedText = GetSourceText();
+        _welcomeText = _savedText;
         RefreshDirty();
         _undo.Reset(_savedText, 0);
         UpdateChrome();
@@ -691,7 +693,7 @@ public partial class MainWindow : Window
     private MainWindow CreateNewWindow()
     {
         var w = new MainWindow();
-        w.ClearDocument();
+        w.ClearDocument(undoable: false);
 
         // 相对当前窗口做阶梯偏移,避免与当前窗口完全重合
         if (double.IsNaN(Left) || double.IsNaN(Top) || WindowState != WindowState.Normal)
@@ -719,21 +721,49 @@ public partial class MainWindow : Window
         CreateNewWindow().Show();
     }
 
-    // 清空:把当前文档重置为空白
+    // 清空:空白或新建时的默认内容直接清空,其余先确认;清空可 Ctrl+Z 撤销
     private void OnClear(object sender, RoutedEventArgs e)
     {
-        if (!ConfirmDiscard()) return;
+        if (ClearPolicy.NeedsConfirm(GetSourceText(), _welcomeText))
+        {
+            var result = ConfirmWindow.Ask(this, _theme, "清空文档",
+                "确定要清空当前文档吗?清空后可以按 Ctrl+Z 撤销。", "清空", null, "取消");
+            if (result != ConfirmResult.Primary) return;
+        }
         ClearDocument();
     }
 
-    private void ClearDocument()
+    private void ClearDocument(bool undoable = true)
     {
         _renderTimer.Stop();
         _groupTimer.Stop();
+
+        var before = GetSourceText();
+        if (undoable)
+        {
+            if (before.Length > 0)
+            {
+                // 清空前的原文入栈,使清空可以 Ctrl+Z 撤回
+                int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+                _undo.Command(before, caret);
+            }
+        }
+        else
+        {
+            _undo.Reset("", 0);
+        }
+
         SetDocument(BuildForMode(""));
         _savedText = GetSourceText();
         RefreshDirty();
-        _undo.Reset(_savedText, 0);
+
+        if (undoable)
+        {
+            // 记录清空后的空状态,这样清空后再输入时 Ctrl+Z 会先回到空、再回到清空前
+            _undo.Change(_savedText, 0);
+            _undo.Commit();
+        }
+
         _currentFile = null;
         UpdateChrome();
         Editor.Focus();
@@ -817,14 +847,13 @@ public partial class MainWindow : Window
     {
         if (GetSourceText() == _savedText) return true;
 
-        var result = MessageBox.Show(
-            "当前文档尚未保存,是否保存更改?", "Zypora",
-            MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+        var result = ConfirmWindow.Ask(this, _theme, "未保存的更改",
+            "当前文档有未保存的更改,是否保存?", "保存", "不保存", "取消");
 
         return result switch
         {
-            MessageBoxResult.Cancel => false,
-            MessageBoxResult.Yes => Save(),
+            ConfirmResult.Cancel => false,
+            ConfirmResult.Primary => Save(),
             _ => true,
         };
     }
