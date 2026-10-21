@@ -937,6 +937,23 @@ internal static class UpdateTests
         var noPrimary = UpdateService.CandidateUrls("");
         T.Ok("empty primary filtered", !noPrimary.Contains("https://mine/update.json") && noPrimary.All(u => !string.IsNullOrWhiteSpace(u)));
 
+        // 多来源取版本最高者(防止 CDN 缓存旧版本挡住新版本)
+        var best = UpdateService.PickBest(new UpdateInfo?[]
+        {
+            new UpdateInfo { Version = "1.2.0", Url = "https://new" },
+            new UpdateInfo { Version = "1.1.3", Url = "https://old" },
+            null,
+        });
+        T.Eq("pick best version", "1.2.0", best?.Version);
+        T.Eq("pick best url", "https://new", best?.Url);
+        T.Eq("pick best single", "1.0.1", UpdateService.PickBest(new UpdateInfo?[] { null, new UpdateInfo { Version = "1.0.1", Url = "https://a" } })?.Version);
+        T.Ok("pick best none", UpdateService.PickBest(new UpdateInfo?[] { null }) == null);
+        T.Eq("pick best keeps first on tie", "https://first", UpdateService.PickBest(new UpdateInfo?[]
+        {
+            new UpdateInfo { Version = "1.2.0", Url = "https://first" },
+            new UpdateInfo { Version = "1.2.0", Url = "https://second" },
+        })?.Url);
+
         // 临时目录名安全(不含路径分隔符)
         var seg = Path.GetFileName(UpdateService.TempDir("1.0.3/../../evil"));
         T.Ok("temp dir sanitized", seg.Length > 0 && !seg.Contains('/') && !seg.Contains('\\'), seg);

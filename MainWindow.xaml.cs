@@ -39,6 +39,10 @@ public partial class MainWindow : Window
     private AppSettings _settings = new();
     private AppTheme _theme = AppTheme.Light;
 
+    // ---- 手动检查更新 ----
+    private bool _checkingUpdate;
+    private readonly DispatcherTimer _statusTimer = new();
+
     // ---- 阅读模式状态 ----
     private bool _reading;
     private WindowStyle _styleBeforeReading;
@@ -103,6 +107,9 @@ public partial class MainWindow : Window
         RefreshDirty();
         _undo.Reset(_savedText, 0);
         UpdateChrome();
+
+        _statusTimer.Tick += (_, _) => HideUpdateStatus();
+        VersionInfoItem.Header = "版本 v" + UpdateService.CurrentVersion();
 
         _settings = SettingsStore.Load(SettingsStore.DefaultDir);
         _theme = _settings.ResolveTheme();
@@ -841,6 +848,88 @@ public partial class MainWindow : Window
     internal bool ConfirmForUpdate() => ConfirmDiscard();
 
     internal string? CurrentFilePath => _currentFile;
+
+    // ---- 设置(齿轮)/ 手动检查更新 ----
+
+    private void OnSettingsMenu(object sender, RoutedEventArgs e)
+    {
+        var cm = SettingsMenuButton.ContextMenu;
+        if (cm == null) return;
+        cm.PlacementTarget = SettingsMenuButton;
+        cm.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        cm.IsOpen = true;
+    }
+
+    private async void OnCheckUpdate(object sender, RoutedEventArgs e) => await CheckForUpdatesManuallyAsync();
+
+    private async Task CheckForUpdatesManuallyAsync()
+    {
+        if (_checkingUpdate) return;
+        _checkingUpdate = true;
+        ShowUpdateStatus("正在检查更新…", 0);
+
+        try
+        {
+            var result = await UpdateService.CheckManualAsync();
+            var current = UpdateService.CurrentVersion();
+
+            if (result.IsFailure || result.Info == null)
+            {
+                ShowUpdateStatus("检查更新失败:" + (result.Error ?? "未知错误"), 6000);
+                return;
+            }
+
+            var info = result.Info;
+            if (!UpdateService.IsNewer(info.Version, current))
+            {
+                ShowUpdateStatus($"已是最新版本 v{current}", 4000);
+                return;
+            }
+
+            // 手动检查不受「跳过此版本」限制,用户主动要看就给结果
+            ShowUpdateStatus($"发现新版本 v{info.Version}", 0);
+            var win = new UpdateWindow(info, AppContext.BaseDirectory, current) { Owner = this };
+            win.ShowDialog();
+
+            if (win.SkipRequested)
+            {
+                var s = SettingsStore.Load(SettingsStore.DefaultDir);
+                s.SkippedVersion = info.Version;
+                SettingsStore.Save(SettingsStore.DefaultDir, s);
+                _settings = s;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowUpdateStatus("检查更新失败:" + ex.Message, 6000);
+        }
+        finally
+        {
+            _checkingUpdate = false;
+            if (UpdateStatusText.Text.StartsWith("正在检查更新", StringComparison.Ordinal))
+            {
+                HideUpdateStatus();
+            }
+        }
+    }
+
+    private void ShowUpdateStatus(string text, int autoHideMs)
+    {
+        UpdateStatusText.Text = text;
+        UpdateStatusText.Visibility = Visibility.Visible;
+        _statusTimer.Stop();
+        if (autoHideMs > 0)
+        {
+            _statusTimer.Interval = TimeSpan.FromMilliseconds(autoHideMs);
+            _statusTimer.Start();
+        }
+    }
+
+    private void HideUpdateStatus()
+    {
+        _statusTimer.Stop();
+        UpdateStatusText.Visibility = Visibility.Collapsed;
+    }
 
     // 有未保存改动时询问;返回 false 表示用户取消(应中止当前操作)
     private bool ConfirmDiscard()

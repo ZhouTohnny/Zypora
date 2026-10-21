@@ -1,4 +1,4 @@
-﻿<Window x:Class="Zypora.MainWindow"
+<Window x:Class="Zypora.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -91,6 +91,7 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Br.Fg}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -104,6 +105,7 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Br.Fg}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -185,6 +187,18 @@
                           StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                           Fill="Transparent"/>
                 </ToggleButton>
+                <TextBlock x:Name="UpdateStatusText" VerticalAlignment="Center" Margin="10,0,2,0" FontSize="12"
+                           Foreground="{DynamicResource Br.Muted}" Visibility="Collapsed"/>
+                <Button x:Name="SettingsMenuButton" Padding="10,5" Style="{StaticResource ToolbarButton}" ToolTip="设置" Click="OnSettingsMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem x:Name="VersionInfoItem" Header="版本" IsEnabled="False"/>
+                            <Separator Style="{StaticResource MenuSeparator}"/>
+                            <MenuItem x:Name="CheckUpdateItem" Header="检查更新…" Click="OnCheckUpdate"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center"/>
+                </Button>
             </WrapPanel>
         </Border>
 
@@ -196,9 +210,9 @@
                 <TextBox x:Name="ReplaceBox" Width="180" Margin="6,0,0,0" VerticalContentAlignment="Center" Padding="4,3"
                          Background="{DynamicResource Br.PanelBg}" Foreground="{DynamicResource Br.Fg}"
                          Visibility="Collapsed" KeyDown="OnReplaceKeyDown"/>
-                <CheckBox x:Name="CaseBox" Content="Aa" Margin="8,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
-                <CheckBox x:Name="WholeWordBox" Content="全词" Margin="6,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
-                <CheckBox x:Name="RegexBox" Content=".*" Margin="6,0,0,0" VerticalAlignment="Center" Click="OnFindOptionChanged"/>
+                <CheckBox x:Name="CaseBox" Content="Aa" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Br.Fg}" Click="OnFindOptionChanged"/>
+                <CheckBox x:Name="WholeWordBox" Content="全词" Margin="6,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Br.Fg}" Click="OnFindOptionChanged"/>
+                <CheckBox x:Name="RegexBox" Content=".*" Margin="6,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Br.Fg}" Click="OnFindOptionChanged"/>
                 <Button Content="上一个" Style="{StaticResource ToolbarButton}" Click="OnFindPrev"/>
                 <Button Content="下一个" Style="{StaticResource ToolbarButton}" Click="OnFindNext"/>
                 <Button x:Name="ReplaceButton" Content="替换" Style="{StaticResource ToolbarButton}" Visibility="Collapsed" Click="OnReplace"/>

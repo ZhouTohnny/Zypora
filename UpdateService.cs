@@ -24,6 +24,17 @@ public sealed class UpdateInfo
 /// <summary>上一版本在替换文件前写入的"本次更新了什么",由新版本首次启动时读取并删除。</summary>
 public sealed record PendingUpdate(string Version, string? Text);
 
+/// <summary>手动检查更新的结果:找到新版本,或失败原因。</summary>
+public sealed class UpdateCheckResult
+{
+    public UpdateInfo? Info { get; init; }
+    public string? Error { get; init; }
+    public bool IsFailure => Error != null;
+
+    public static UpdateCheckResult Found(UpdateInfo info) => new() { Info = info };
+    public static UpdateCheckResult Failed(string error) => new() { Error = error };
+}
+
 public sealed class UpdateApplyResult
 {
     public bool Success { get; init; }
@@ -130,37 +141,59 @@ public static class UpdateService
 
     public static async Task<UpdateInfo?> CheckAsync(string? primary = null, CancellationToken ct = default)
     {
-        var fromJson = await CheckJsonAsync(primary, ct).ConfigureAwait(false);
-        var fromRelease = await CheckLatestReleaseAsync(ct).ConfigureAwait(false);
+        var fromJsonTask = CheckJsonAsync(primary, ct);
+        var fromReleaseTask = CheckLatestReleaseAsync(ct);
+        var fromJson = await fromJsonTask.ConfigureAwait(false);
+        var fromRelease = await fromReleaseTask.ConfigureAwait(false);
 
-        // 两个来源取版本更高的那个(GitHub 上发了新 Release 就能自动跟上)
-        if (fromRelease != null && (fromJson == null || IsNewer(fromRelease.Version, fromJson.Version)))
+        // 所有来源取版本最高的那个(GitHub 上发了新 Release 就能自动跟上)
+        return PickBest(new[] { fromJson, fromRelease });
+    }
+
+    /// <summary>取版本最高的有效结果(纯函数,便于单测)。</summary>
+    public static UpdateInfo? PickBest(IEnumerable<UpdateInfo?> items)
+    {
+        UpdateInfo? best = null;
+        foreach (var item in items)
         {
-            return fromRelease;
+            if (item == null || string.IsNullOrWhiteSpace(item.Version)) continue;
+            if (best == null || IsNewer(item.Version, best.Version)) best = item;
         }
-        return fromJson;
+        return best;
+    }
+
+    /// <summary>手动检查:返回结果或失败摘要,供界面明确展示(自动检查仍然静默)。</summary>
+    public static async Task<UpdateCheckResult> CheckManualAsync(string? primary = null, CancellationToken ct = default)
+    {
+        var info = await CheckAsync(primary, ct).ConfigureAwait(false);
+        return info == null
+            ? UpdateCheckResult.Failed("无法连接更新服务器,或没有可用的更新包")
+            : UpdateCheckResult.Found(info);
     }
 
     private static async Task<UpdateInfo?> CheckJsonAsync(string? primary, CancellationToken ct)
     {
-        foreach (var url in CandidateUrls(primary))
+        // 所有候选源并行请求:jsDelivr 有 CDN 缓存,不能因为它是第一个返回的就忽略 GitHub raw 的新版本
+        var tasks = CandidateUrls(primary).Select(url => FetchInfoAsync(url, ct)).ToArray();
+        return PickBest(await Task.WhenAll(tasks).ConfigureAwait(false));
+    }
+
+    private static async Task<UpdateInfo?> FetchInfoAsync(string url, CancellationToken ct)
+    {
+        try
         {
-            try
-            {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(UpdateConfig.CheckTimeout);
-                using var resp = await Http.GetAsync(url, cts.Token).ConfigureAwait(false);
-                if (!resp.IsSuccessStatusCode) continue;
-                var text = await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
-                var info = ParseInfo(text);
-                if (info != null) return info;
-            }
-            catch
-            {
-                // 静默:任何失败都尝试下一个源
-            }
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(UpdateConfig.CheckTimeout);
+            using var resp = await Http.GetAsync(url, cts.Token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            var text = await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            return ParseInfo(text);
         }
-        return null;
+        catch
+        {
+            // 静默:单个源失败不影响其它源
+            return null;
+        }
     }
 
     /// <summary>GitHub Releases API:取最新 Release(失败静默返回 null)。</summary>
