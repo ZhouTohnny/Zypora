@@ -13,8 +13,8 @@ public static class EditableRenderer
     private static readonly string Mono = "Consolas";
     private static readonly string Body = "Microsoft YaHei UI";
 
-    private static readonly Regex BoldRegex = new(@"(\*\*|__)(.+?)(\*\*|__)", RegexOptions.Compiled);
-    private static readonly Regex ItalicRegex = new(@"(?<!\*)(\*|_)(?!\*)(.+?)(\*|_)", RegexOptions.Compiled);
+    private static readonly Regex BoldRegex = new(@"(\*\*|__)(.+?)(\1)", RegexOptions.Compiled);
+    private static readonly Regex ItalicRegex = new(@"(?<![*_])(\*|_)(?![*_])(.+?)(?<![*_])(\1)(?![*_])", RegexOptions.Compiled);
     private static readonly Regex CodeRegex = new(@"(`[^`]+`)", RegexOptions.Compiled);
 
     public static string ReadSource(FlowDocument doc)
@@ -304,13 +304,20 @@ public static class EditableRenderer
             return p;
         }
 
-        // Unordered list:实心圆点
-        var ul = Regex.Match(trimmed, @"^[-*+]\s+");
+        // Unordered list:实心圆点(仅当标记末尾是普通空格时用容器替换该空格,保证与源码逐字恒等)
+        var ul = Regex.Match(trimmed, @"^[-*+] +");
         if (ul.Success)
         {
             var marker = trimmed.Substring(0, ul.Groups[0].Value.Length);
-            p.Inlines.Add(new Run(marker.Substring(0, marker.Length - 1)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
-            p.Inlines.Add(CreateBullet(t));
+            if (preview)
+            {
+                p.Inlines.Add(new Run(marker.Substring(0, marker.Length - 1)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
+                p.Inlines.Add(CreateBullet(t));
+            }
+            else
+            {
+                p.Inlines.Add(Marker(marker, false, t));
+            }
             AppendInlineMarkdown(p, trimmed.Substring(marker.Length), preview, t);
             return p;
         }

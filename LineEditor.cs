@@ -4,9 +4,9 @@ namespace Zypora;
 
 public static class LineEditor
 {
-    private static readonly Regex HeadingRegex = new(@"^(#+)\s+(.*)$");
-    private static readonly Regex UlPrefix = new(@"^(\s*)([-*+])(\s+)", RegexOptions.Compiled);
-    private static readonly Regex OlPrefix = new(@"^(\s*)(\d+)([.)])(\s+)", RegexOptions.Compiled);
+    private static readonly Regex HeadingRegex = new(@"^(#{1,6})(?: (.*)|$)", RegexOptions.Compiled);
+    private static readonly Regex UlPrefix = new(@"^(\s*)([-*+])( +)", RegexOptions.Compiled);
+    private static readonly Regex OlPrefix = new(@"^(\s*)(\d+)([.)])( +)", RegexOptions.Compiled);
 
     // 判断某个偏移是否处于围栏代码块内部(``` 或 ~~~)
     public static bool IsInsideFence(string source, int offset)
@@ -86,18 +86,22 @@ public static class LineEditor
     {
         if (start > end) (start, end) = (end, start);
 
-        var lines = source.Split('\n');
-        var starts = new int[lines.Length];
+        var rawLines = source.Split('\n');
+        var cores = new string[rawLines.Length];
+        var hadCr = new bool[rawLines.Length];
+        var starts = new int[rawLines.Length];
         int acc = 0;
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < rawLines.Length; i++)
         {
             starts[i] = acc;
-            acc += lines[i].Length + 1;
+            acc += rawLines[i].Length + 1;
+            hadCr[i] = rawLines[i].EndsWith("\r");
+            cores[i] = hadCr[i] ? rawLines[i].Substring(0, rawLines[i].Length - 1) : rawLines[i];
         }
 
         int LineOf(int off)
         {
-            for (int i = lines.Length - 1; i >= 0; i--)
+            for (int i = rawLines.Length - 1; i >= 0; i--)
                 if (off >= starts[i]) return i;
             return 0;
         }
@@ -108,17 +112,17 @@ public static class LineEditor
 
         bool allMatch = true;
         for (int i = first; i <= last; i++)
-            if (!detect.IsMatch(lines[i])) { allMatch = false; break; }
+            if (!detect.IsMatch(cores[i])) { allMatch = false; break; }
 
-        var delta = new int[lines.Length];
+        var delta = new int[rawLines.Length];
         for (int i = first; i <= last; i++)
         {
-            var line = lines[i];
+            var line = cores[i];
             if (allMatch)
             {
                 var m = strip.Match(line);
                 int removed = m.Success ? m.Length : 0;
-                if (removed > 0) lines[i] = strip.Replace(line, "", 1);
+                if (removed > 0) cores[i] = strip.Replace(line, "", 1);
                 delta[i] = -removed;
             }
             else if (detect.IsMatch(line))
@@ -127,58 +131,69 @@ public static class LineEditor
             }
             else
             {
-                lines[i] = mark + line;
+                cores[i] = mark + line;
                 delta[i] = mark.Length;
             }
+            rawLines[i] = cores[i] + (hadCr[i] ? "\r" : "");
         }
 
         int MapOffset(int off)
         {
-            if (lines.Length == 0) return off;
+            if (rawLines.Length == 0) return off;
             int k = LineOf(Math.Min(off, source.Length));
             int column = off - starts[k];
-            int newColumn = Math.Clamp(column + delta[k], 0, lines[k].Length);
+            int newColumn = Math.Clamp(column + delta[k], 0, cores[k].Length);
             int newStart = starts[k];
             for (int i = 0; i < k; i++) newStart += delta[i];
             return newStart + newColumn;
         }
 
-        return (string.Join("\n", lines), MapOffset(start), MapOffset(end));
+        return (string.Join("\n", rawLines), MapOffset(start), MapOffset(end));
     }
 
     public static (string Text, int Caret) ToggleHeading(string source, int caret, int level)
     {
-        var lines = source.Split('\n');
-        int target = FindLine(lines, caret, out int lineStart);
-        var line = lines[target];
-        int leading = line.Length - line.TrimStart().Length;
-        var content = line.TrimStart();
-        int oldColumn = caret - lineStart;
+        var rawLines = source.Split('\n');
+        int target = FindLine(rawLines, caret, out int lineStart);
+        var rawLine = rawLines[target];
+        bool hadCr = rawLine.EndsWith("\r");
+        var line = hadCr ? rawLine.Substring(0, rawLine.Length - 1) : rawLine;
+
+        var content = line.TrimStart(' ', '\t');
+        int leading = line.Length - content.Length;
+        var leadingStr = line.Substring(0, leading);
+        int oldColumn = Math.Clamp(caret - lineStart, 0, line.Length);
 
         var m = HeadingRegex.Match(content);
         int delta;
+        string updated;
         if (m.Success && m.Groups[1].Value.Length == level)
         {
-            lines[target] = new string(' ', leading) + m.Groups[2].Value;
-            delta = -(level + 1);
+            var body = m.Groups[2].Success ? m.Groups[2].Value : "";
+            int oldMarker = content.Length - body.Length;
+            updated = leadingStr + body;
+            delta = -oldMarker;
         }
         else
         {
-            var body = m.Success ? m.Groups[2].Value : content;
-            int oldMarker = m.Success ? m.Groups[1].Value.Length + 1 : 0;
-            lines[target] = new string(' ', leading) + new string('#', level) + " " + body;
+            var body = m.Success ? (m.Groups[2].Success ? m.Groups[2].Value : "") : content;
+            int oldMarker = m.Success ? content.Length - body.Length : 0;
+            updated = leadingStr + new string('#', level) + " " + body;
             delta = (level + 1) - oldMarker;
         }
 
-        int newColumn = Math.Clamp(oldColumn + delta, 0, lines[target].Length);
-        return (string.Join("\n", lines), lineStart + newColumn);
+        rawLines[target] = updated + (hadCr ? "\r" : "");
+        int newColumn = Math.Clamp(oldColumn + delta, 0, updated.Length);
+        return (string.Join("\n", rawLines), lineStart + newColumn);
     }
 
     public static int FindLine(string[] lines, int caret, out int lineStart)
     {
         int acc = 0;
+        int lastStart = 0;
         for (int i = 0; i < lines.Length; i++)
         {
+            lastStart = acc;
             int len = lines[i].Length;
             if (caret >= acc && caret <= acc + len)
             {
@@ -187,7 +202,7 @@ public static class LineEditor
             }
             acc += len + 1;
         }
-        lineStart = acc;
-        return lines.Length - 1;
+        lineStart = lastStart;
+        return Math.Max(0, lines.Length - 1);
     }
 }

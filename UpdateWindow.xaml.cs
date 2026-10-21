@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 
 namespace Zypora;
 
@@ -10,20 +11,33 @@ public partial class UpdateWindow : Window
     private CancellationTokenSource? _cts;
     private bool _updating;
 
-    public UpdateWindow(UpdateInfo info, string appDir, string currentVersion)
+    public UpdateWindow(UpdateInfo info, string appDir, string currentVersion, AppTheme theme = AppTheme.Light)
     {
         InitializeComponent();
+
+        var c = ChromeTheme.Of(theme);
+        Resources["Br.WindowBg"] = new SolidColorBrush(c.WindowBg);
+        Resources["Br.PanelBg"] = new SolidColorBrush(c.PanelBg);
+        Resources["Br.PanelBorder"] = new SolidColorBrush(c.PanelBorder);
+        Resources["Br.Fg"] = new SolidColorBrush(c.Fg);
+        Resources["Br.Muted"] = new SolidColorBrush(c.Muted);
+        Resources["Br.Hover"] = new SolidColorBrush(c.Hover);
+        Resources["Br.Accent"] = new SolidColorBrush(c.Checked);
+        Resources["Br.AccentFg"] = new SolidColorBrush(c.CheckedFg);
+
         _info = info;
         _appDir = appDir;
 
         HeadlineText.Text = $"发现新版本 v{info.Version}(当前 v{currentVersion})";
-        if (string.IsNullOrWhiteSpace(info.Notes))
+        var notes = string.IsNullOrWhiteSpace(info.Notes) ? info.Changelog : info.Notes;
+        if (string.IsNullOrWhiteSpace(notes))
         {
             NotesBox.Visibility = Visibility.Collapsed;
         }
         else
         {
-            NotesText.Text = info.Notes;
+            NotesText.Text = notes;
+            NotesBox.Visibility = Visibility.Visible;
         }
     }
 
@@ -81,6 +95,12 @@ public partial class UpdateWindow : Window
 
             // 记录本次更新内容,新版本首次启动时提示
             UpdateService.WritePendingInfo(SettingsStore.DefaultDir, _info.Version, _info.ChangelogOrNotes);
+
+            // 更新前已确认过未保存改动,关闭时不再重复弹窗拦截 Shutdown
+            foreach (var w in Application.Current.Windows.OfType<MainWindow>())
+            {
+                w.SuppressClosingPrompt();
+            }
 
             UpdateService.StartNewVersion(_appDir, CurrentOpenFile);
             Application.Current.Shutdown();

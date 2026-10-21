@@ -90,6 +90,10 @@ internal static class SearchTests
         T.Eq("ReplaceOne text", "hello there", r1);
         T.Eq("ReplaceOne caret", 11, c1);
 
+        var (r1Regex, c1Regex) = SearchService.ReplaceOne("a1 b2", (0, 2), "$2$1", @"(\w)(\d)", Regex);
+        T.Eq("ReplaceOne regex groups", "1a b2", r1Regex);
+        T.Eq("ReplaceOne regex caret", 2, c1Regex);
+
         var (r2, n2) = SearchService.ReplaceAll("a a a", "a", "b", Plain);
         T.Eq("ReplaceAll text", "b b b", r2);
         T.Eq("ReplaceAll count", 3, n2);
@@ -529,6 +533,10 @@ internal static class LineTests
         T.Eq("h1 add", "# hello", LineEditor.ToggleHeading("hello", 0, 1).Text);
         T.Eq("h1 remove", "hello", LineEditor.ToggleHeading("# hello", 2, 1).Text);
         T.Eq("h2 from h1", "## hi", LineEditor.ToggleHeading("# hi", 2, 2).Text);
+        T.Eq("h1 on empty crlf line", "# \r\nnext", LineEditor.ToggleHeading("\r\nnext", 0, 1).Text);
+        T.Eq("h1 remove empty crlf line", "\r\nnext", LineEditor.ToggleHeading("# \r\nnext", 2, 1).Text);
+        T.Eq("h1 remove bare hash", "", LineEditor.ToggleHeading("#", 1, 1).Text);
+        T.Eq("ul remove empty crlf line", "\r\nb", LineEditor.TogglePrefixRange("- \r\nb", 0, 2, "- ", Ul, Ul).Text);
 
         var le1 = LineEditor.HandleListEnter("- item", 6);
         T.Ok("list enter handled", le1.Handled);
@@ -600,6 +608,12 @@ internal static class FeatureTests
         T.Eq("identity empty fence", "", IdentityOnly("```\r\n```"));
         T.Eq("identity unclosed fence", "", IdentityOnly("```\r\ncode"));
         T.Eq("identity spaces line", "", IdentityOnly("a\r\n   \r\nb"));
+        T.Eq("identity ul tab", "", IdentityOnly("-\titem"));
+
+        var mismatchBold = (WpfParagraph)EditableRenderer.BuildPreview("**not bold__").Blocks.FirstBlock!;
+        T.Ok("mismatched bold ignored", !mismatchBold.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.FontWeight == System.Windows.FontWeights.Bold));
+        var mismatchItalic = (WpfParagraph)EditableRenderer.BuildPreview("*not italic_").Blocks.FirstBlock!;
+        T.Ok("mismatched italic ignored", !mismatchItalic.Inlines.OfType<System.Windows.Documents.Run>().Any(r => r.FontStyle == System.Windows.FontStyles.Italic));
     }
 
     private static string IdentityOnly(string src)
@@ -634,6 +648,16 @@ internal static class PdfTests
         catch (Exception ex)
         {
             T.Ok("pdf empty doc", false, ex.GetType().Name + ": " + ex.Message);
+        }
+
+        try
+        {
+            var withTable = PdfExporter.Export("| 功能 | 快捷键 |\r\n|:--|:--|\r\n| 查找 | Ctrl+F |\r\n| 加粗 | Ctrl+B |");
+            T.Ok("pdf table doc", withTable.Length > 500);
+        }
+        catch (Exception ex)
+        {
+            T.Ok("pdf table doc", false, ex.GetType().Name + ": " + ex.Message);
         }
     }
 }
@@ -887,7 +911,7 @@ internal static class TableFitTests
             .Select(p => (p.Inlines.OfType<WpfUIC>().FirstOrDefault()?.Child) as FrameworkElement)
             .FirstOrDefault(c => c != null)!;
         T.Ok("table row visual exists", row != null);
-        row.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        row!.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         T.Ok("row fits available width", row.DesiredSize.Width <= 402, "w=" + row.DesiredSize.Width);
 
         T.Eq("fit keeps identity", md, EditableRenderer.ReadSource(doc));
@@ -1072,6 +1096,107 @@ internal static class UpdateTests
     }
 }
 
+internal static class WindowTests
+{
+    private static object? Call(object target, string name, params object?[] args)
+        => target.GetType()
+            .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .Invoke(target, args);
+
+    private static T Get<T>(object target, string name)
+        => (T)target.GetType()
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .GetValue(target)!;
+
+    private static void Set(object target, string name, object? value)
+        => target.GetType()
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!
+            .SetValue(target, value);
+
+    private static string Source(object w) => (string)Call(w, "GetSourceText")!;
+
+    public static void Run()
+    {
+        T.Section("UpdateWindow");
+
+        var info = new UpdateInfo { Version = "1.2.3", Url = "https://x/y.zip", Notes = "新增 A" };
+        var uw = new UpdateWindow(info, AppContext.BaseDirectory, "1.2.2", AppTheme.Dark);
+        T.Eq("update notes visible", Visibility.Visible, ((FrameworkElement)uw.FindName("NotesBox")).Visibility);
+        T.Eq("update notes text", "新增 A", ((TextBlock)uw.FindName("NotesText")).Text);
+        T.Eq("update headline", "发现新版本 v1.2.3(当前 v1.2.2)", ((TextBlock)uw.FindName("HeadlineText")).Text);
+        T.Eq("update window dark themed", ChromeTheme.Of(AppTheme.Dark).Fg,
+            ((SolidColorBrush)uw.Resources["Br.Fg"]).Color);
+        uw.Close();
+
+        var empty = new UpdateWindow(new UpdateInfo { Version = "1.2.3", Url = "https://x/y.zip" },
+            AppContext.BaseDirectory, "1.2.2");
+        T.Eq("update notes hidden when empty", Visibility.Collapsed,
+            ((FrameworkElement)empty.FindName("NotesBox")).Visibility);
+        empty.Close();
+
+        var changelog = new UpdateWindow(new UpdateInfo { Version = "1.2.3", Url = "https://x/y.zip", Changelog = "修复 B" },
+            AppContext.BaseDirectory, "1.2.2");
+        T.Eq("update falls back to changelog", "修复 B", ((TextBlock)changelog.FindName("NotesText")).Text);
+        changelog.Close();
+
+        T.Section("MainWindow");
+
+        var w = new MainWindow();
+        var welcome = Source(w);
+        T.Ok("welcome not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
+        T.Eq("window title", "Zypora", w.Title);
+
+        Call(w, "ClearDocument", true);
+        T.Ok("cleared empty not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
+
+        var undo = Get<UndoCoordinator>(w, "_undo");
+        var restored = undo.Undo("", 0);
+        T.Ok("clear undo available", restored != null);
+        Call(w, "ApplyCommandText", restored!.Value.Text, restored.Value.Caret);
+        T.Eq("undo restores welcome text", welcome, Source(w));
+        T.Ok("restored welcome not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
+
+        Call(w, "ApplyCommandText", welcome + "x", welcome.Length + 1);
+        T.Ok("typed text is dirty", (bool)Call(w, "HasUnsavedChanges")!);
+
+        var findBar = (FrameworkElement)w.FindName("FindBar");
+        var editor = (RichTextBox)w.FindName("Editor");
+
+        Call(w, "ShowFind", false);
+        T.Eq("find bar shown", Visibility.Visible, findBar.Visibility);
+        Call(w, "EnterReadingMode");
+        T.Eq("reading hides find bar", Visibility.Collapsed, findBar.Visibility);
+        Call(w, "ExitReadingMode");
+        T.Eq("reading restores find bar", Visibility.Visible, findBar.Visibility);
+        T.Eq("reading restores window style", WindowStyle.SingleBorderWindow, w.WindowStyle);
+        T.Ok("reading chrome cleared", System.Windows.Shell.WindowChrome.GetWindowChrome(w) == null);
+
+        Call(w, "ClearDocument", true);
+        Call(w, "ApplyCommandText", "cat catalog cat", 0);
+
+        var findBox = (TextBox)w.FindName("FindBox");
+        var replaceBox = (TextBox)w.FindName("ReplaceBox");
+        findBox.Text = "cat";
+        replaceBox.Text = "catX";
+        Call(w, "RecomputeMatches");
+        Set(w, "_matchIndex", 0);
+        Call(w, "SelectMatch", 0);
+        T.Eq("select match keeps selection", "cat", editor.Selection.Text);
+
+        Call(w, "ReplaceCurrent");
+        T.Eq("replace uses query and advances", "catX catalog cat", Source(w));
+        T.Eq("replace leaves next match selected", "cat", editor.Selection.Text);
+        Call(w, "ReplaceCurrent");
+        T.Eq("replace advances again", "catX catXalog cat", Source(w));
+        Call(w, "ReplaceCurrent");
+        T.Eq("replace never loops", "catX catXalog catX", Source(w));
+
+        Call(w, "CloseFind");
+        Call(w, "SuppressClosingPrompt");
+        w.Close();
+    }
+}
+
 internal static class Program
 {
     [STAThread]
@@ -1093,12 +1218,13 @@ internal static class Program
         RunGroup("Theme", ThemeTests.Run);
         RunGroup("TableFit", TableFitTests.Run);
         RunGroup("Update", UpdateTests.Run);
+        RunGroup("Windows", WindowTests.Run);
         return T.Report();
     }
 
     private static void RunGroup(string name, Action body)
     {
         try { body(); }
-        catch (Exception ex) { T.Ok(name + " threw", false, ex.GetType().Name + ": " + ex.Message); }
+        catch (Exception ex) { T.Ok(name + " threw", false, ex.ToString()); }
     }
 }

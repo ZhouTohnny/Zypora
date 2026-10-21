@@ -39,9 +39,12 @@ public static class PdfExporter
         return doc.GeneratePdf();
     }
 
+    private static readonly MarkdownPipeline Pipeline =
+        new MarkdownPipelineBuilder().UsePipeTables().Build();
+
     private static void RenderMarkdownToPdf(IContainer container, string markdown)
     {
-        var parsed = Markdig.Markdown.Parse(markdown);
+        var parsed = Markdig.Markdown.Parse(markdown, Pipeline);
 
         container.Column(col =>
         {
@@ -105,7 +108,54 @@ public static class PdfExporter
             case ThematicBreakBlock:
                 item.PaddingVertical(6).LineHorizontal(1);
                 break;
+
+            case Markdig.Extensions.Tables.Table mdTable:
+                RenderTableToPdf(item, mdTable);
+                break;
         }
+    }
+
+    private static void RenderTableToPdf(IContainer container, Markdig.Extensions.Tables.Table mdTable)
+    {
+        var rows = mdTable.OfType<Markdig.Extensions.Tables.TableRow>().ToList();
+        if (rows.Count == 0) return;
+        int colCount = Math.Max(1, rows.Max(r => r.Count));
+
+        container.PaddingVertical(4).Table(table =>
+        {
+            table.ColumnsDefinition(cols =>
+            {
+                for (int i = 0; i < colCount; i++) cols.RelativeColumn();
+            });
+
+            foreach (var row in rows)
+            {
+                bool isHeader = row.IsHeader;
+                for (int c = 0; c < colCount; c++)
+                {
+                    var cellText = "";
+                    if (c < row.Count && row[c] is Markdig.Extensions.Tables.TableCell cell)
+                    {
+                        var parts = new List<string>();
+                        foreach (var b in cell)
+                        {
+                            if (b is ParagraphBlock pb) parts.Add(RenderInlinesToText(pb.Inline));
+                        }
+                        cellText = string.Join("\n", parts);
+                    }
+
+                    var cellBox = table.Cell()
+                        .Border(0.5f)
+                        .BorderColor(Colors.Grey.Lighten1)
+                        .Background(isHeader ? Colors.Grey.Lighten4 : Colors.White)
+                        .PaddingHorizontal(6)
+                        .PaddingVertical(4);
+
+                    var textSpan = cellBox.Text(cellText).FontSize(10);
+                    if (isHeader) textSpan.Bold();
+                }
+            }
+        });
     }
 
     private static void RenderListToPdf(IContainer container, ListBlock list)
@@ -161,7 +211,7 @@ public static class PdfExporter
                 sb.Append(code.Content);
                 break;
             case LineBreakInline:
-                sb.Append(' ');
+                sb.Append('\n');
                 break;
             default:
                 if (inline is ContainerInline ci)

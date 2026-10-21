@@ -21,6 +21,8 @@ public partial class ConfirmWindow : Window
     public ConfirmWindow(AppTheme theme, string headline, string message,
         string primaryText, string? secondaryText = null, string cancelText = "取消")
     {
+        InitializeComponent();
+
         var c = ChromeTheme.Of(theme);
         Resources["Br.WindowBg"] = new SolidColorBrush(c.WindowBg);
         Resources["Br.PanelBg"] = new SolidColorBrush(c.PanelBg);
@@ -30,8 +32,6 @@ public partial class ConfirmWindow : Window
         Resources["Br.Hover"] = new SolidColorBrush(c.Hover);
         Resources["Br.Accent"] = new SolidColorBrush(c.Checked);
         Resources["Br.AccentFg"] = new SolidColorBrush(c.CheckedFg);
-
-        InitializeComponent();
 
         HeadlineText.Text = headline;
         MessageText.Text = message;

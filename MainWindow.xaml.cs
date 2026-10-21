@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private string _savedText = "";
     private string _welcomeText = "";
     private bool _dirty;
+    private bool _skipClosingPrompt;
     private readonly DispatcherTimer _renderTimer = new();
     private readonly DispatcherTimer _groupTimer = new();
     private readonly UndoCoordinator _undo = new();
@@ -126,6 +127,8 @@ public partial class MainWindow : Window
 
     private void SetDocument(FlowDocument doc)
     {
+        _renderTimer.Stop();
+        _renderQueued = false;
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
@@ -158,9 +161,17 @@ public partial class MainWindow : Window
         return width > 1 ? width : Math.Max(1, Editor.ActualWidth);
     }
 
+    private bool HasUnsavedChanges()
+    {
+        var current = GetSourceText();
+        if (current == _savedText) return false;
+        if (_currentFile == null && current == _welcomeText) return false;
+        return true;
+    }
+
     private void RefreshDirty()
     {
-        bool dirty = GetSourceText() != _savedText;
+        bool dirty = HasUnsavedChanges();
         if (dirty != _dirty)
         {
             _dirty = dirty;
@@ -177,6 +188,12 @@ public partial class MainWindow : Window
     private void OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         if (_suppressChanged || _composing) return;
+        int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+        _undo.Change(GetSourceText(), caret);
+        _groupTimer.Stop();
+        _groupTimer.Start();
+        RefreshDirty();
+
         if (_mode == ViewMode.Preview)
         {
             QueueRender();
@@ -193,6 +210,7 @@ public partial class MainWindow : Window
         _renderQueued = true;
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
+            if (!_renderQueued) return;
             _renderQueued = false;
             ReRender();
         }));
@@ -220,9 +238,20 @@ public partial class MainWindow : Window
         {
             _renderTimer.Stop();
             var source = GetSourceText();
+            int selStart = DocumentCaret.GetCaretOffset(Editor.Document, Editor.Selection.Start);
+            int selEnd = DocumentCaret.GetCaretOffset(Editor.Document, Editor.Selection.End);
             int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
             SetDocument(BuildForMode(source));
-            Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, caret);
+            if (selStart != selEnd)
+            {
+                var p1 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(selStart, 0, source.Length));
+                var p2 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(selEnd, 0, source.Length));
+                Editor.Selection.Select(p1, p2);
+            }
+            else
+            {
+                Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, source.Length));
+            }
             _undo.Change(GetSourceText(), caret);
             _groupTimer.Stop();
             _groupTimer.Start();
@@ -574,11 +603,17 @@ public partial class MainWindow : Window
         _resizeBeforeReading = ResizeMode;
         _findBarBeforeReading = FindBar.Visibility;
 
-        if (_mode != ViewMode.Preview)
+        double vScroll = GetVerticalScrollOffset();
+        int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+
+        // 强制切到预览并重建文档(同时清除可能残留的查找高亮)
+        if (_mode != ViewMode.Preview || _findBarBeforeReading == Visibility.Visible)
         {
             _mode = ViewMode.Preview;
             UpdateModeMenu();
-            SetDocument(BuildForMode(GetSourceText()));
+            var source = GetSourceText();
+            SetDocument(BuildForMode(source));
+            Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, source.Length));
         }
 
         Editor.IsReadOnly = true;
@@ -598,6 +633,7 @@ public partial class MainWindow : Window
             UseAeroCaptionButtons = false,
         });
         WindowStyle = WindowStyle.None;
+        SetVerticalScrollOffset(vScroll);
         Editor.Focus();
     }
 
@@ -606,9 +642,13 @@ public partial class MainWindow : Window
         if (!_reading) return;
         _reading = false;
 
+        double vScroll = GetVerticalScrollOffset();
+        int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+
         ExitReadingButton.Visibility = Visibility.Collapsed;
         ResetReadingScrollBar();
         ToolbarBorder.Visibility = Visibility.Visible;
+        FindBar.Visibility = _findBarBeforeReading;
 
         // 顺序很关键:必须先恢复 WindowStyle/ResizeMode,再清除 WindowChrome。
         // 反过来的话,WPF 会在窗口还是 None 样式时清理圆角区域,之后恢复样式又把
@@ -620,8 +660,35 @@ public partial class MainWindow : Window
         Editor.IsReadOnly = false;
         _mode = ViewMode.Preview;
         UpdateModeMenu();
-        SetDocument(BuildForMode(GetSourceText()));
+        var source = GetSourceText();
+        SetDocument(BuildForMode(source));
+        Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, source.Length));
+        if (FindBar.Visibility == Visibility.Visible)
+        {
+            RecomputeMatches();
+            PaintHighlights();
+            UpdateMatchLabel();
+        }
+        SetVerticalScrollOffset(vScroll);
         Editor.Focus();
+    }
+
+    private double GetVerticalScrollOffset()
+    {
+        Editor.ApplyTemplate();
+        return Editor.Template?.FindName("PART_ContentHost", Editor) is System.Windows.Controls.ScrollViewer sv
+            ? sv.VerticalOffset
+            : 0;
+    }
+
+    private void SetVerticalScrollOffset(double offset)
+    {
+        if (offset <= 0) return;
+        Editor.ApplyTemplate();
+        if (Editor.Template?.FindName("PART_ContentHost", Editor) is System.Windows.Controls.ScrollViewer sv)
+        {
+            sv.ScrollToVerticalOffset(offset);
+        }
     }
 
     // 阅读模式:右侧滚动条平时隐藏,滚动时出现,5 秒无操作后淡出
@@ -724,7 +791,6 @@ public partial class MainWindow : Window
 
     private void OnNewWindow(object sender, RoutedEventArgs e)
     {
-        if (!ConfirmDiscard()) return;
         CreateNewWindow().Show();
     }
 
@@ -847,6 +913,8 @@ public partial class MainWindow : Window
     // 供更新流程调用:返回 false 表示用户取消(中止更新)
     internal bool ConfirmForUpdate() => ConfirmDiscard();
 
+    internal void SuppressClosingPrompt() => _skipClosingPrompt = true;
+
     internal string? CurrentFilePath => _currentFile;
 
     // ---- 设置(齿轮)/ 手动检查更新 ----
@@ -888,7 +956,7 @@ public partial class MainWindow : Window
 
             // 手动检查不受「跳过此版本」限制,用户主动要看就给结果
             ShowUpdateStatus($"发现新版本 v{info.Version}", 0);
-            var win = new UpdateWindow(info, AppContext.BaseDirectory, current) { Owner = this };
+            var win = new UpdateWindow(info, AppContext.BaseDirectory, current, _theme) { Owner = this };
             win.ShowDialog();
 
             if (win.SkipRequested)
@@ -934,7 +1002,7 @@ public partial class MainWindow : Window
     // 有未保存改动时询问;返回 false 表示用户取消(应中止当前操作)
     private bool ConfirmDiscard()
     {
-        if (GetSourceText() == _savedText) return true;
+        if (!HasUnsavedChanges()) return true;
 
         var result = ConfirmWindow.Ask(this, _theme, "未保存的更改",
             "当前文档有未保存的更改,是否保存?", "保存", "不保存", "取消");
@@ -949,7 +1017,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (!ConfirmDiscard())
+        if (!_skipClosingPrompt && !ConfirmDiscard())
         {
             e.Cancel = true;
             return;
@@ -982,6 +1050,12 @@ public partial class MainWindow : Window
 
     private void OnPasting(object sender, DataObjectPastingEventArgs e)
     {
+        if (_reading)
+        {
+            e.CancelCommand();
+            return;
+        }
+
         try
         {
             if (e.SourceDataObject.GetDataPresent(DataFormats.Bitmap) &&
@@ -1012,6 +1086,12 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
+        if (_reading)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         e.Effects = DragDropEffects.Copy;
         e.Handled = true;
@@ -1019,6 +1099,11 @@ public partial class MainWindow : Window
 
     private void OnDrop(object sender, DragEventArgs e)
     {
+        if (_reading)
+        {
+            e.Handled = true;
+            return;
+        }
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         var files = e.Data.GetData(DataFormats.FileDrop) as string[];
         var images = files?.Where(ImageSupport.IsImageExtension).ToArray();
@@ -1180,10 +1265,10 @@ public partial class MainWindow : Window
         var p1 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, start);
         var p2 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, start + len);
         Editor.Selection.Select(p1, p2);
-        // 借编辑器聚焦触发滚动到选区,随后把焦点交还查找框
-        Editor.Focus();
-        Editor.CaretPosition = p2;
-        FindBox.Focus();
+        if (p1.Parent is FrameworkContentElement fce)
+        {
+            fce.BringIntoView();
+        }
     }
 
     private void UpdateMatchLabel()
@@ -1199,8 +1284,22 @@ public partial class MainWindow : Window
     {
         if (_matchIndex < 0 || _matchIndex >= _matches.Count) return;
 
-        var (text, caret) = SearchService.ReplaceOne(GetSourceText(), _matches[_matchIndex], ReplaceBox.Text);
+        var opts = CurrentSearchOptions();
+        var (text, caret) = SearchService.ReplaceOne(
+            GetSourceText(), _matches[_matchIndex], ReplaceBox.Text, FindBox.Text, opts);
         ApplyCommandText(text, caret);
+
+        var nextMatches = SearchService.Find(GetSourceText(), FindBox.Text, opts);
+        int nextIdx = -1;
+        for (int i = 0; i < nextMatches.Count; i++)
+        {
+            if (nextMatches[i].Start >= caret)
+            {
+                nextIdx = i;
+                break;
+            }
+        }
+        _matchIndex = nextIdx >= 0 ? nextIdx : (nextMatches.Count > 0 ? 0 : -1);
         RebuildForSearch(selectCurrent: true);
     }
 

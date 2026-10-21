@@ -71,7 +71,7 @@ public partial class App : Application
                 var settings = SettingsStore.Load(SettingsStore.DefaultDir);
                 if (string.Equals(settings.SkippedVersion, info.Version, StringComparison.OrdinalIgnoreCase)) return;
 
-                var win = new UpdateWindow(info, AppContext.BaseDirectory, current) { Owner = owner };
+                var win = new UpdateWindow(info, AppContext.BaseDirectory, current, settings.ResolveTheme()) { Owner = owner };
                 win.ShowDialog();
 
                 if (win.SkipRequested)
