@@ -169,8 +169,6 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
-                <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
-                <Separator Margin="6,0"/>
                 <Button x:Name="ThemeMenuButton" Content="主题 ▾" Style="{StaticResource ToolbarButton}" ToolTip="主题:常规 / 夜间 / 护眼" Click="OnThemeMenu">
                     <Button.ContextMenu>
                         <ContextMenu>
@@ -180,6 +178,8 @@
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
+                <Button Content="清空" Style="{StaticResource ToolbarButton}" Click="OnClear" ToolTip="清空当前文档 (Ctrl+Shift+N)"/>
+                <Separator Margin="6,0"/>
                 <ToggleButton x:Name="TopmostButton" Padding="10,5" Style="{StaticResource ToolbarToggleButton}" Click="OnToggleTopmost" ToolTip="窗口置顶(总显示在最前)">
                     <Path Width="15" Height="15" Stretch="Uniform"
                           Data="M 10,2 L 14,2 L 14,4 L 13,5 L 17,11 L 18,11 L 18,13 L 6,13 L 6,11 L 7,11 L 11,5 L 10,4 Z M 12,13 L 12,21"
