@@ -27,6 +27,9 @@ public partial class MainWindow : Window
     private string _welcomeText = "";
     private bool _dirty;
     private bool _skipClosingPrompt;
+    private FileChangeMonitor? _fileMonitor;
+    private bool _fileConflict;
+    private bool _fileDeleted;
     private readonly DispatcherTimer _renderTimer = new();
     private readonly DispatcherTimer _groupTimer = new();
     private readonly UndoCoordinator _undo = new();
@@ -108,6 +111,8 @@ public partial class MainWindow : Window
         RefreshDirty();
         _undo.Reset(_savedText, 0);
         UpdateChrome();
+
+        Activated += (_, _) => _fileMonitor?.Refresh();
 
         _statusTimer.Tick += (_, _) => HideUpdateStatus();
         VersionInfoItem.Header = "版本 v" + UpdateService.CurrentVersion();
@@ -323,6 +328,7 @@ public partial class MainWindow : Window
     {
         UpdateModeMenu();
         Title = "Zypora";
+        ReloadFileItem.IsEnabled = _currentFile != null;
     }
 
     // ---- 模式下拉(预览 / 原生 / 阅读) ----
@@ -838,6 +844,8 @@ public partial class MainWindow : Window
         }
 
         _currentFile = null;
+        DetachFileMonitor();
+        ClearFileFlags();
         UpdateChrome();
         Editor.Focus();
     }
@@ -869,6 +877,8 @@ public partial class MainWindow : Window
             _savedText = GetSourceText();
             RefreshDirty();
             _undo.Reset(_savedText, 0);
+            AttachFileMonitor(path, _savedText);
+            ClearFileFlags();
             UpdateChrome();
             Editor.Focus();
         }
@@ -896,11 +906,15 @@ public partial class MainWindow : Window
         try
         {
             var text = GetSourceText();
+            if (_fileConflict && !ConfirmOverwriteExternal()) return false;
+
             File.WriteAllText(_currentFile, text);
             _savedText = text;
+            AttachFileMonitor(_currentFile, text);
+            ClearFileFlags();
             RefreshDirty();
             UpdateChrome();
-            MessageBox.Show("已保存。", "Zypora", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("已保存", "Zypora", MessageBoxButton.OK, MessageBoxImage.Information);
             return true;
         }
         catch (Exception ex)
@@ -914,6 +928,148 @@ public partial class MainWindow : Window
     internal bool ConfirmForUpdate() => ConfirmDiscard();
 
     internal void SuppressClosingPrompt() => _skipClosingPrompt = true;
+
+    // ---- 外部文件修改 ----
+
+    internal void ApplyExternalChange(string text)
+    {
+        if (_currentFile == null) return;
+
+        var decision = ExternalFileChange.Decide(text, GetSourceText(), HasUnsavedChanges());
+        if (decision == ExternalFileDecision.Ignore)
+        {
+            ClearFileFlags();
+            return;
+        }
+        if (decision == ExternalFileDecision.Reload)
+        {
+            ReloadExternal(text);
+            return;
+        }
+
+        _fileConflict = true;
+        _fileDeleted = false;
+        UpdateFileStatus();
+    }
+
+    internal void ApplyExternalDeleted()
+    {
+        if (_currentFile == null) return;
+        _fileDeleted = true;
+        _fileConflict = false;
+        UpdateFileStatus();
+    }
+
+    private void ReloadExternal(string text)
+    {
+        double scroll = GetVerticalScrollOffset();
+        int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
+        int selStart = DocumentCaret.GetCaretOffset(Editor.Document, Editor.Selection.Start);
+        int selEnd = DocumentCaret.GetCaretOffset(Editor.Document, Editor.Selection.End);
+
+        _renderTimer.Stop();
+        _renderQueued = false;
+        _groupTimer.Stop();
+        SetDocument(BuildForMode(text));
+        _savedText = GetSourceText();
+        int len = _savedText.Length;
+        _undo.Reset(_savedText, Math.Clamp(caret, 0, len));
+
+        if (selStart != selEnd)
+        {
+            var p1 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(Math.Min(selStart, selEnd), 0, len));
+            var p2 = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(Math.Max(selStart, selEnd), 0, len));
+            Editor.Selection.Select(p1, p2);
+        }
+        else
+        {
+            Editor.CaretPosition = DocumentCaret.GetPointerAtCharOffset(Editor.Document, Math.Clamp(caret, 0, len));
+        }
+
+        _fileMonitor?.UpdateDiskText(text);
+        ClearFileFlags();
+        RefreshDirty();
+        if (FindBar.Visibility == Visibility.Visible)
+        {
+            RecomputeMatches();
+            PaintHighlights();
+            UpdateMatchLabel();
+        }
+        SetVerticalScrollOffset(scroll);
+    }
+
+    private void ReloadFromDisk()
+    {
+        if (_currentFile == null) return;
+        if (!ConfirmDiscard()) return;
+        LoadFile(_currentFile);
+    }
+
+    private void OnReloadFile(object sender, RoutedEventArgs e) => ReloadFromDisk();
+
+    private bool ConfirmOverwriteExternal()
+    {
+        var result = ConfirmWindow.Ask(this, _theme, "文件已被外部修改",
+            "磁盘上的内容已被其他程序修改,继续保存会覆盖这些修改。", "覆盖", null, "取消");
+        return result == ConfirmResult.Primary;
+    }
+
+    private void AttachFileMonitor(string path, string text)
+    {
+        DetachFileMonitor();
+        try
+        {
+            _fileMonitor = new FileChangeMonitor(path, () => TryReadAllText(path), (kind, newText) =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    if (kind == FileChangeKind.Deleted) ApplyExternalDeleted();
+                    else if (newText != null) ApplyExternalChange(newText);
+                }));
+            });
+            _fileMonitor.UpdateDiskText(text);
+        }
+        catch (Exception)
+        {
+            _fileMonitor = null;
+        }
+    }
+
+    private void DetachFileMonitor()
+    {
+        _fileMonitor?.Dispose();
+        _fileMonitor = null;
+    }
+
+    private static string? TryReadAllText(string path)
+        => File.Exists(path) ? File.ReadAllText(path) : null;
+
+    private void ClearFileFlags()
+    {
+        _fileConflict = false;
+        _fileDeleted = false;
+        UpdateFileStatus();
+    }
+
+    private void UpdateFileStatus()
+    {
+        if (_fileDeleted) ShowFileStatus("文件已被删除,保存将重新创建");
+        else if (_fileConflict) ShowFileStatus("文件已在外部修改,保存将覆盖");
+        else ShowFileStatus(null);
+    }
+
+    private void ShowFileStatus(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            FileStatusText.Text = "";
+            FileStatusText.Visibility = Visibility.Collapsed;
+            return;
+        }
+        FileStatusText.Text = text;
+        FileStatusText.Visibility = Visibility.Visible;
+    }
 
     internal string? CurrentFilePath => _currentFile;
 
@@ -1022,6 +1178,7 @@ public partial class MainWindow : Window
             e.Cancel = true;
             return;
         }
+        DetachFileMonitor();
         base.OnClosing(e);
     }
 

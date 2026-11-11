@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Zypora;
 using WpfDoc = System.Windows.Documents.FlowDocument;
 using WpfParagraph = System.Windows.Documents.Paragraph;
@@ -1115,6 +1116,21 @@ internal static class WindowTests
 
     private static string Source(object w) => (string)Call(w, "GetSourceText")!;
 
+    private static bool PumpUntil(Func<bool> cond, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (cond()) return true;
+            var frame = new DispatcherFrame();
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+            timer.Start();
+            Dispatcher.PushFrame(frame);
+        }
+        return cond();
+    }
+
     public static void Run()
     {
         T.Section("UpdateWindow");
@@ -1194,6 +1210,116 @@ internal static class WindowTests
         Call(w, "CloseFind");
         Call(w, "SuppressClosingPrompt");
         w.Close();
+
+        var dir = Path.Combine(Path.GetTempPath(), "zypora-win-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, "doc.md");
+        File.WriteAllText(file, "alpha");
+
+        var w2 = new MainWindow();
+        Call(w2, "LoadFile", file);
+        T.Eq("external: loaded", "alpha", Source(w2));
+
+        Call(w2, "ApplyExternalChange", "beta");
+        T.Eq("external: auto reload", "beta", Source(w2));
+        T.Ok("external: reload not dirty", !(bool)Call(w2, "HasUnsavedChanges")!);
+
+        Call(w2, "ApplyCommandText", "local edit", 3);
+        T.Ok("external: local dirty", (bool)Call(w2, "HasUnsavedChanges")!);
+
+        Call(w2, "ApplyExternalChange", "gamma");
+        T.Eq("external: conflict keeps local", "local edit", Source(w2));
+        T.Ok("external: conflict still dirty", (bool)Call(w2, "HasUnsavedChanges")!);
+        var hint = (FrameworkElement)w2.FindName("FileStatusText");
+        T.Eq("external: conflict hint", Visibility.Visible, hint.Visibility);
+        T.Eq("external: conflict hint text", "文件已在外部修改,保存将覆盖", ((TextBlock)hint).Text);
+
+        Call(w2, "ApplyExternalChange", "local edit");
+        T.Eq("external: same content clears hint", Visibility.Collapsed, hint.Visibility);
+
+        Call(w2, "ApplyExternalDeleted");
+        T.Eq("external: deleted hint text", "文件已被删除,保存将重新创建", ((TextBlock)hint).Text);
+
+        Call(w2, "SuppressClosingPrompt");
+        w2.Close();
+
+        var w3 = new MainWindow();
+        Call(w3, "LoadFile", file);
+        File.WriteAllText(file, "outside");
+        T.Ok("external: watcher reloads ui", PumpUntil(() => Source(w3) == "outside", 4000), Source(w3));
+        Call(w3, "SuppressClosingPrompt");
+        w3.Close();
+
+        try { Directory.Delete(dir, true); } catch { }
+    }
+}
+
+internal static class ExternalFileChangeTests
+{
+    private static bool WaitUntil(Func<bool> cond, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (cond()) return true;
+            System.Threading.Thread.Sleep(50);
+        }
+        return cond();
+    }
+
+    public static void Run()
+    {
+        T.Section("ExternalFileChange");
+
+        T.Eq("decide ignore equal", ExternalFileDecision.Ignore, ExternalFileChange.Decide("a", "a", true));
+        T.Eq("decide reload clean", ExternalFileDecision.Reload, ExternalFileChange.Decide("b", "a", false));
+        T.Eq("decide conflict dirty", ExternalFileDecision.Conflict, ExternalFileChange.Decide("b", "a", true));
+
+        var dir = Path.Combine(Path.GetTempPath(), "zypora-ext-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "doc.md");
+        File.WriteAllText(path, "one");
+
+        var events = new List<(FileChangeKind Kind, string? Text)>();
+        var gate = new object();
+        int Count() { lock (gate) return events.Count; }
+        (FileChangeKind Kind, string? Text) Last() { lock (gate) return events[^1]; }
+
+        using var mon = new FileChangeMonitor(path,
+            () => File.Exists(path) ? File.ReadAllText(path) : null,
+            (kind, text) => { lock (gate) events.Add((kind, text)); });
+
+        T.Eq("monitor baseline", "one", mon.DiskText);
+
+        File.WriteAllText(path, "two");
+        T.Ok("monitor external write", WaitUntil(() => Count() == 1, 3000), "count=" + Count());
+        T.Eq("monitor external kind", FileChangeKind.Modified, Last().Kind);
+        T.Eq("monitor external text", "two", Last().Text);
+
+        mon.UpdateDiskText("two");
+        File.WriteAllText(path, "two");
+        T.Ok("monitor own write ignored", !WaitUntil(() => Count() > 1, 800), "count=" + Count());
+
+        var swap = Path.Combine(dir, "swap.tmp");
+        File.WriteAllText(swap, "three");
+        File.Move(swap, path, true);
+        T.Ok("monitor atomic replace", WaitUntil(() => Count() == 2, 3000), "count=" + Count());
+        T.Eq("monitor replace text", "three", Last().Text);
+
+        mon.UpdateDiskText("three");
+        File.Delete(path);
+        T.Ok("monitor delete", WaitUntil(() => Count() == 3, 3000), "count=" + Count());
+        T.Eq("monitor delete kind", FileChangeKind.Deleted, Last().Kind);
+
+        File.WriteAllText(path, "four");
+        T.Ok("monitor recreate", WaitUntil(() => Count() == 4, 3000), "count=" + Count());
+        T.Eq("monitor recreate text", "four", Last().Text);
+
+        mon.Dispose();
+        File.WriteAllText(path, "five");
+        T.Ok("monitor dispose stops", !WaitUntil(() => Count() > 4, 800), "count=" + Count());
+
+        try { Directory.Delete(dir, true); } catch { }
     }
 }
 
@@ -1218,6 +1344,7 @@ internal static class Program
         RunGroup("Theme", ThemeTests.Run);
         RunGroup("TableFit", TableFitTests.Run);
         RunGroup("Update", UpdateTests.Run);
+        RunGroup("ExternalFileChange", ExternalFileChangeTests.Run);
         RunGroup("Windows", WindowTests.Run);
         return T.Report();
     }

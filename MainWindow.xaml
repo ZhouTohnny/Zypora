@@ -130,6 +130,7 @@
                         <ContextMenu>
                             <MenuItem Header="新建窗口" InputGestureText="Ctrl+N" Click="OnNewWindow"/>
                             <MenuItem Header="打开…" InputGestureText="Ctrl+O" Click="OnOpen"/>
+                            <MenuItem x:Name="ReloadFileItem" Header="重新加载" Click="OnReloadFile" IsEnabled="False"/>
                             <MenuItem Header="保存" InputGestureText="Ctrl+S" Click="OnSave"/>
                             <Separator Style="{StaticResource MenuSeparator}"/>
                             <MenuItem Header="导出 PDF…" Click="OnExportPdf"/>
@@ -187,6 +188,8 @@
                           StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                           Fill="Transparent"/>
                 </ToggleButton>
+                <TextBlock x:Name="FileStatusText" VerticalAlignment="Center" Margin="10,0,2,0" FontSize="12"
+                           Foreground="{DynamicResource Br.Muted}" Visibility="Collapsed"/>
                 <TextBlock x:Name="UpdateStatusText" VerticalAlignment="Center" Margin="10,0,2,0" FontSize="12"
                            Foreground="{DynamicResource Br.Muted}" Visibility="Collapsed"/>
                 <Button x:Name="SettingsMenuButton" Padding="10,5" Style="{StaticResource ToolbarButton}" ToolTip="设置" Click="OnSettingsMenu">
