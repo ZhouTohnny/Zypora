@@ -487,6 +487,7 @@ public static class EditableRenderer
                 Padding = new Thickness(8, 4, 8, 4),
                 Child = tb,
             };
+            border.ContextMenu = BuildCellMenu(model, text);
             Grid.SetColumn(border, c);
             grid.Children.Add(border);
         }
@@ -497,7 +498,38 @@ public static class EditableRenderer
             BorderThickness = new Thickness(1, 1, 0, 0),
             Child = grid,
             Tag = widths,
+            ContextMenu = BuildTableMenu(model),
         };
+    }
+
+    private static ContextMenu BuildCellMenu(TableModel model, string cellText)
+    {
+        var menu = new ContextMenu();
+
+        var copyCell = new MenuItem { Header = "复制单元格" };
+        copyCell.Click += (_, _) => CopyToClipboard(TableClipboard.CellText(cellText));
+        menu.Items.Add(copyCell);
+
+        var copyTable = new MenuItem { Header = "复制整个表格" };
+        copyTable.Click += (_, _) => CopyToClipboard(TableClipboard.TableText(model));
+        menu.Items.Add(copyTable);
+
+        return menu;
+    }
+
+    private static ContextMenu BuildTableMenu(TableModel model)
+    {
+        var menu = new ContextMenu();
+        var copyTable = new MenuItem { Header = "复制整个表格" };
+        copyTable.Click += (_, _) => CopyToClipboard(TableClipboard.TableText(model));
+        menu.Items.Add(copyTable);
+        return menu;
+    }
+
+    private static void CopyToClipboard(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try { Clipboard.SetText(text); } catch (Exception) { }
     }
 
     private static FrameworkElement BuildImageVisual(string src, string? docDir, string? appDir, RenderTheme t)

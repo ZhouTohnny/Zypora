@@ -1254,6 +1254,35 @@ internal static class WindowTests
     }
 }
 
+internal static class TableClipboardTests
+{
+    public static void Run()
+    {
+        T.Section("TableClipboard");
+
+        T.Eq("cell text trims", "加粗", TableClipboard.CellText("  加粗  "));
+        T.Eq("cell text empty", "", TableClipboard.CellText("   "));
+        T.Eq("cell text plain", "Ctrl+F", TableClipboard.CellText("Ctrl+F"));
+
+        var lines = new[] { "| 功能 | 快捷键 |", "|:--|:--|", "| 查找 | Ctrl+F |", "| 加粗 |  |" };
+        T.Ok("clipboard parse", TableParser.TryParse(lines, 0, out var model, out _));
+        T.Eq("table text tsv", "功能\t快捷键\r\n查找\tCtrl+F\r\n加粗\t", TableClipboard.TableText(model));
+
+        var doc = EditableRenderer.BuildPreview("| A | B |\r\n|:--|:--|\r\n| 1 | 2 |");
+        var para = doc.Blocks.OfType<WpfParagraph>().First(p => p.Inlines.OfType<WpfUIC>().Any());
+        var rowVisual = (System.Windows.Controls.Border)((WpfUIC)para.Inlines.OfType<WpfUIC>().First()).Child!;
+        T.Ok("row menu exists", rowVisual.ContextMenu != null);
+        T.Eq("row menu count", 1, rowVisual.ContextMenu!.Items.Count);
+        T.Eq("row menu header", "复制整个表格", ((System.Windows.Controls.MenuItem)rowVisual.ContextMenu.Items[0]).Header);
+
+        var cellVisual = (System.Windows.Controls.Border)((System.Windows.Controls.Grid)rowVisual.Child).Children[0];
+        T.Ok("cell menu exists", cellVisual.ContextMenu != null);
+        T.Eq("cell menu count", 2, cellVisual.ContextMenu!.Items.Count);
+        T.Eq("cell menu first", "复制单元格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[0]).Header);
+        T.Eq("cell menu second", "复制整个表格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[1]).Header);
+    }
+}
+
 internal static class ExternalFileChangeTests
 {
     private static bool WaitUntil(Func<bool> cond, int timeoutMs)
@@ -1343,6 +1372,7 @@ internal static class Program
         RunGroup("Settings", SettingsTests.Run);
         RunGroup("Theme", ThemeTests.Run);
         RunGroup("TableFit", TableFitTests.Run);
+        RunGroup("TableClipboard", TableClipboardTests.Run);
         RunGroup("Update", UpdateTests.Run);
         RunGroup("ExternalFileChange", ExternalFileChangeTests.Run);
         RunGroup("Windows", WindowTests.Run);
