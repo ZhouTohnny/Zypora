@@ -1241,6 +1241,20 @@ internal static class WindowTests
 
         var findBar = (FrameworkElement)w.FindName("FindBar");
         var editor = (RichTextBox)w.FindName("Editor");
+        T.Ok("editor enables document UIElements", editor.IsDocumentEnabled);
+
+        var welcomeTablePara = editor.Document.Blocks.OfType<WpfParagraph>()
+            .First(p => p.Inlines.OfType<WpfUIC>().Any(i => i.Child is Border));
+        var welcomeRow = (Border)welcomeTablePara.Inlines.OfType<WpfUIC>().First(i => i.Child is Border).Child!;
+        var welcomeCell0 = (Border)((Grid)welcomeRow.Child).Children[0];
+        var cellInfo0 = (TableCellInfo)welcomeCell0.Tag;
+        Call(w, "SelectTableCellRange", cellInfo0, cellInfo0);
+        T.Eq("selected single table cell text", "功能",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
+        var cellInfoLast = cellInfo0.TableCells[^1];
+        Call(w, "SelectTableCellRange", cellInfo0, cellInfoLast);
+        T.Eq("selected multi table cell text", "功能\t快捷键\r\n查找\tCtrl+F\r\n替换\tCtrl+H\r\n加粗\tCtrl+B",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
 
         Call(w, "ShowFind", false);
         T.Eq("find bar shown", Visibility.Visible, findBar.Visibility);
@@ -1327,25 +1341,39 @@ internal static class TableClipboardTests
         T.Eq("cell text trims", "加粗", TableClipboard.CellText("  加粗  "));
         T.Eq("cell text empty", "", TableClipboard.CellText("   "));
         T.Eq("cell text plain", "Ctrl+F", TableClipboard.CellText("Ctrl+F"));
+        T.Eq("cell text strips inline code", "Hcg.Common/DVRMonitorHelper.cs",
+            TableClipboard.CellText(" `Hcg.Common/DVRMonitorHelper.cs` "));
+        T.Eq("cell text strips mixed inline markdown", "弹窗封装 ShowErrorNotifier 与 加粗",
+            TableClipboard.CellText("弹窗封装 `ShowErrorNotifier` 与 **加粗**"));
 
-        var lines = new[] { "| 功能 | 快捷键 |", "|:--|:--|", "| 查找 | Ctrl+F |", "| 加粗 |  |" };
+        var lines = new[] { "| 功能 | 快捷键 |", "|:--|:--|", "| 查找 | `Ctrl+F` |", "| **加粗** |  |" };
         T.Ok("clipboard parse", TableParser.TryParse(lines, 0, out var model, out _));
         T.Eq("table text tsv", "功能\t快捷键\r\n查找\tCtrl+F\r\n加粗\t", TableClipboard.TableText(model));
+        T.Eq("row text tsv", "查找\tCtrl+F", TableClipboard.RowText(model, 1));
+        T.Eq("range text single cell", "Ctrl+F", TableClipboard.RangeText(model, 1, 1, 1, 1));
+        T.Eq("range text subtable", "功能\t快捷键\r\n查找\tCtrl+F", TableClipboard.RangeText(model, 0, 1, 0, 1));
+        T.Eq("convert selection table to tsv",
+            "功能\t快捷键\r\n查找\tCtrl+F",
+            TableClipboard.ConvertSelectionText("| 功能 | 快捷键 |\r\n|:--|:--|\r\n| 查找 | `Ctrl+F` |"));
 
         var doc = EditableRenderer.BuildPreview("| A | B |\r\n|:--|:--|\r\n| 1 | 2 |");
         var para = doc.Blocks.OfType<WpfParagraph>().First(p => p.Inlines.OfType<WpfUIC>().Any());
         var rowVisual = (System.Windows.Controls.Border)((WpfUIC)para.Inlines.OfType<WpfUIC>().First()).Child!;
+        T.Ok("row tag preserves widths array", rowVisual.Tag is double[]);
         T.Ok("row menu exists", rowVisual.ContextMenu != null);
-        T.Eq("row menu count", 1, rowVisual.ContextMenu!.Items.Count);
-        T.Eq("row menu header", "复制整个表格", ((System.Windows.Controls.MenuItem)rowVisual.ContextMenu.Items[0]).Header);
+        T.Eq("row menu count", 2, rowVisual.ContextMenu!.Items.Count);
+        T.Eq("row menu first", "复制整行", ((System.Windows.Controls.MenuItem)rowVisual.ContextMenu.Items[0]).Header);
+        T.Eq("row menu second", "复制整个表格", ((System.Windows.Controls.MenuItem)rowVisual.ContextMenu.Items[1]).Header);
 
         T.Ok("row hit-test background", rowVisual.Background != null);
         var cellVisual = (System.Windows.Controls.Border)((System.Windows.Controls.Grid)rowVisual.Child).Children[0];
         T.Ok("cell hit-test background", cellVisual.Background != null);
+        T.Ok("cell tag has TableCellInfo", cellVisual.Tag is TableCellInfo { RowIndex: 0, ColumnIndex: 0 });
         T.Ok("cell menu exists", cellVisual.ContextMenu != null);
-        T.Eq("cell menu count", 2, cellVisual.ContextMenu!.Items.Count);
+        T.Eq("cell menu count", 3, cellVisual.ContextMenu!.Items.Count);
         T.Eq("cell menu first", "复制单元格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[0]).Header);
-        T.Eq("cell menu second", "复制整个表格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[1]).Header);
+        T.Eq("cell menu second", "复制整行", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[1]).Header);
+        T.Eq("cell menu third", "复制整个表格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[2]).Header);
     }
 }
 

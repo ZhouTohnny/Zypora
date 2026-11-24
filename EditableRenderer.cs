@@ -425,6 +425,9 @@ public static class EditableRenderer
             widths[c] = Math.Max(48, max * 9 + 18);
         }
 
+        var tableCells = new List<TableCellInfo>();
+        int rowIndex = 0;
+
         for (int k = start; k < end; k++)
         {
             var line = lines[k];
@@ -441,12 +444,13 @@ public static class EditableRenderer
             if (lastSpace < 0)
             {
                 doc.Blocks.Add(BuildLine(line, line.TrimStart(), preview, docDir, appDir, t));
+                rowIndex++;
                 continue;
             }
 
             bool header = k == start;
             var cells = TableParser.SplitCells(line);
-            var visual = BuildRowVisual(model, cells, widths, header, t);
+            var visual = BuildRowVisual(model, rowIndex++, cells, widths, header, t, tableCells);
 
             var p = new Paragraph { Margin = new Thickness(0) };
             p.Inlines.Add(new Run(line.Substring(0, lastSpace)) { Foreground = Brushes.Transparent, FontSize = 0.1 });
@@ -456,7 +460,8 @@ public static class EditableRenderer
         }
     }
 
-    private static FrameworkElement BuildRowVisual(TableModel model, IReadOnlyList<string> cells, double[] widths, bool header, RenderTheme t)
+    private static FrameworkElement BuildRowVisual(TableModel model, int rowIndex, IReadOnlyList<string> cells,
+        double[] widths, bool header, RenderTheme t, List<TableCellInfo> tableCells)
     {
         var grid = new Grid();
         for (int c = 0; c < widths.Length; c++)
@@ -489,50 +494,84 @@ public static class EditableRenderer
                 Padding = new Thickness(8, 4, 8, 4),
                 Child = tb,
             };
-            border.ContextMenu = BuildCellMenu(model, text);
+            var cellInfo = new TableCellInfo(model, rowIndex, c, text, border, tableCells);
+            border.Tag = cellInfo;
+            tableCells.Add(cellInfo);
+            border.ContextMenu = BuildCellMenu(model, rowIndex, text);
+            ContextMenuService.SetShowOnDisabled(border, true);
             Grid.SetColumn(border, c);
             grid.Children.Add(border);
         }
 
-        return new Border
+        var rowBorder = new Border
         {
             Background = Brushes.Transparent,
             BorderBrush = t.GridLine,
             BorderThickness = new Thickness(1, 1, 0, 0),
             Child = grid,
             Tag = widths,
-            ContextMenu = BuildTableMenu(model),
+            ContextMenu = BuildTableMenu(model, rowIndex),
         };
+        ContextMenuService.SetShowOnDisabled(rowBorder, true);
+        return rowBorder;
     }
 
-    private static ContextMenu BuildCellMenu(TableModel model, string cellText)
+    public static TableCellInfo? HitTestTableCell(Visual root, Point point)
+    {
+        var hit = VisualTreeHelper.HitTest(root, point)?.VisualHit;
+        DependencyObject? cur = hit;
+        while (cur != null && cur != root)
+        {
+            if (cur is Border { Tag: TableCellInfo info }) return info;
+            cur = VisualTreeHelper.GetParent(cur) ?? LogicalTreeHelper.GetParent(cur);
+        }
+        return null;
+    }
+
+    public static FrameworkElement? HitTestTableMenuTarget(Visual root, Point point)
+    {
+        var hit = VisualTreeHelper.HitTest(root, point)?.VisualHit;
+        DependencyObject? cur = hit;
+        while (cur != null && cur != root)
+        {
+            if (cur is FrameworkElement { ContextMenu: not null } fe) return fe;
+            cur = VisualTreeHelper.GetParent(cur) ?? LogicalTreeHelper.GetParent(cur);
+        }
+        return null;
+    }
+
+    private static ContextMenu BuildCellMenu(TableModel model, int rowIndex, string cellText)
     {
         var menu = new ContextMenu();
 
         var copyCell = new MenuItem { Header = "复制单元格" };
-        copyCell.Click += (_, _) => CopyToClipboard(TableClipboard.CellText(cellText));
+        copyCell.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.CellText(cellText), "已复制单元格");
         menu.Items.Add(copyCell);
 
+        var copyRow = new MenuItem { Header = "复制整行" };
+        copyRow.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.RowText(model, rowIndex), "已复制整行");
+        menu.Items.Add(copyRow);
+
         var copyTable = new MenuItem { Header = "复制整个表格" };
-        copyTable.Click += (_, _) => CopyToClipboard(TableClipboard.TableText(model));
+        copyTable.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.TableText(model), "已复制整个表格");
         menu.Items.Add(copyTable);
 
         return menu;
     }
 
-    private static ContextMenu BuildTableMenu(TableModel model)
+    private static ContextMenu BuildTableMenu(TableModel model, int rowIndex)
     {
         var menu = new ContextMenu();
-        var copyTable = new MenuItem { Header = "复制整个表格" };
-        copyTable.Click += (_, _) => CopyToClipboard(TableClipboard.TableText(model));
-        menu.Items.Add(copyTable);
-        return menu;
-    }
 
-    private static void CopyToClipboard(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return;
-        try { Clipboard.SetText(text); } catch (Exception) { }
+        var copyRow = new MenuItem { Header = "复制整行" };
+        copyRow.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.RowText(model, rowIndex), "已复制整行");
+        menu.Items.Add(copyRow);
+
+        var copyTable = new MenuItem { Header = "复制整个表格" };
+        copyTable.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.TableText(model), "已复制整个表格");
+        menu.Items.Add(copyTable);
+
+        return menu;
     }
 
     private static FrameworkElement BuildImageVisual(string src, string? docDir, string? appDir, RenderTheme t)

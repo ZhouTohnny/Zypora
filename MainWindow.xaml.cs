@@ -60,6 +60,13 @@ public partial class MainWindow : Window
     private static readonly Brush MatchBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xF3, 0xA0));
     private static readonly Brush CurrentMatchBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x47));
 
+    // ---- 预览表格鼠标选中与复制 ----
+    private TableCellInfo? _tableDragAnchor;
+    private string? _selectedTableText;
+    private bool _selectedTableSingleCell;
+    private readonly List<System.Windows.Controls.Border> _highlightedCells = new();
+    private readonly Action<string> _onTableCopied;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -87,6 +94,20 @@ public partial class MainWindow : Window
         });
 
         DataObject.AddPastingHandler(Editor, OnPasting);
+        DataObject.AddCopyingHandler(Editor, OnEditorCopying);
+        Editor.PreviewMouseLeftButtonDown += OnEditorPreviewMouseLeftButtonDown;
+        Editor.PreviewMouseMove += OnEditorPreviewMouseMove;
+        Editor.PreviewMouseLeftButtonUp += OnEditorPreviewMouseLeftButtonUp;
+        Editor.PreviewMouseRightButtonDown += OnEditorPreviewMouseRightButtonDown;
+        Editor.PreviewMouseRightButtonUp += OnEditorPreviewMouseRightButtonUp;
+        Editor.ContextMenuOpening += OnEditorContextMenuOpening;
+        _onTableCopied = notice =>
+        {
+            if (Dispatcher.HasShutdownStarted) return;
+            Dispatcher.BeginInvoke(new Action(() => ShowUpdateStatus(notice, 2500)));
+        };
+        TableClipboard.Copied += _onTableCopied;
+
         Editor.AllowDrop = true;
         Editor.PreviewDragOver += OnDragOver;
         Editor.PreviewDrop += OnDrop;
@@ -134,6 +155,7 @@ public partial class MainWindow : Window
     {
         _renderTimer.Stop();
         _renderQueued = false;
+        ClearTableSelection();
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
@@ -1210,8 +1232,179 @@ public partial class MainWindow : Window
             e.Cancel = true;
             return;
         }
+        TableClipboard.Copied -= _onTableCopied;
         DetachFileMonitor();
         base.OnClosing(e);
+    }
+
+    // ---- 预览表格:点击/拖选单元格 + Ctrl+C 复制 + 右键菜单 ----
+
+    private void OnEditorPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var cell = EditableRenderer.HitTestTableCell(Editor, e.GetPosition(Editor));
+        if (cell == null)
+        {
+            ClearTableSelection();
+            return;
+        }
+
+        _tableDragAnchor = cell;
+        SelectTableCellRange(cell, cell);
+        if (!Editor.Selection.IsEmpty)
+        {
+            Editor.Selection.Select(Editor.CaretPosition, Editor.CaretPosition);
+        }
+        Editor.Focus();
+        e.Handled = true;
+    }
+
+    private void OnEditorPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_tableDragAnchor == null || e.LeftButton != MouseButtonState.Pressed) return;
+        var cell = EditableRenderer.HitTestTableCell(Editor, e.GetPosition(Editor));
+        if (cell != null && ReferenceEquals(cell.Model, _tableDragAnchor.Model))
+        {
+            SelectTableCellRange(_tableDragAnchor, cell);
+        }
+    }
+
+    private void OnEditorPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _tableDragAnchor = null;
+    }
+
+    private void OnEditorPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var pt = e.GetPosition(Editor);
+        var cell = EditableRenderer.HitTestTableCell(Editor, pt);
+        if (cell != null)
+        {
+            if (!_highlightedCells.Contains(cell.CellBorder))
+            {
+                SelectTableCellRange(cell, cell);
+            }
+            Editor.Focus();
+            e.Handled = true;
+            return;
+        }
+
+        if (EditableRenderer.HitTestTableMenuTarget(Editor, pt) != null)
+        {
+            Editor.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private void OnEditorPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var pt = e.GetPosition(Editor);
+        var target = EditableRenderer.HitTestTableMenuTarget(Editor, pt);
+        if (target?.ContextMenu is { } menu)
+        {
+            OpenTableContextMenu(menu);
+            e.Handled = true;
+        }
+    }
+
+    private void OnEditorContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
+    {
+        var pt = Mouse.GetPosition(Editor);
+        var target = EditableRenderer.HitTestTableMenuTarget(Editor, pt);
+        if (target?.ContextMenu is { } menu)
+        {
+            OpenTableContextMenu(menu);
+            e.Handled = true;
+        }
+    }
+
+    private void OpenTableContextMenu(System.Windows.Controls.ContextMenu menu)
+    {
+        foreach (var key in Resources.Keys)
+        {
+            menu.Resources[key] = Resources[key];
+        }
+        if (TryFindResource(typeof(System.Windows.Controls.ContextMenu)) is Style cmStyle)
+        {
+            menu.Style = cmStyle;
+        }
+        if (TryFindResource(typeof(System.Windows.Controls.MenuItem)) is Style miStyle)
+        {
+            foreach (var item in menu.Items.OfType<System.Windows.Controls.MenuItem>())
+            {
+                item.Style = miStyle;
+            }
+        }
+        menu.PlacementTarget = Editor;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.IsOpen = true;
+    }
+
+    internal void SelectTableCellRange(TableCellInfo from, TableCellInfo to)
+    {
+        ClearTableSelection();
+
+        int minR = Math.Min(from.RowIndex, to.RowIndex);
+        int maxR = Math.Max(from.RowIndex, to.RowIndex);
+        int minC = Math.Min(from.ColumnIndex, to.ColumnIndex);
+        int maxC = Math.Max(from.ColumnIndex, to.ColumnIndex);
+
+        var highlightBrush = Resources["Br.Checked"] as Brush
+            ?? new SolidColorBrush(Color.FromArgb(90, 0xCF, 0xE3, 0xFF));
+
+        foreach (var info in from.TableCells)
+        {
+            if (info.RowIndex >= minR && info.RowIndex <= maxR &&
+                info.ColumnIndex >= minC && info.ColumnIndex <= maxC)
+            {
+                info.CellBorder.Background = highlightBrush;
+                _highlightedCells.Add(info.CellBorder);
+            }
+        }
+
+        _selectedTableText = TableClipboard.RangeText(from.Model, minR, maxR, minC, maxC);
+        _selectedTableSingleCell = minR == maxR && minC == maxC;
+    }
+
+    internal string? SelectedTableText => _selectedTableText;
+
+    private void ClearTableSelection()
+    {
+        foreach (var border in _highlightedCells)
+        {
+            border.Background = Brushes.Transparent;
+        }
+        _highlightedCells.Clear();
+        _selectedTableText = null;
+        _selectedTableSingleCell = false;
+        _tableDragAnchor = null;
+    }
+
+    private bool TryCopySelectedTableCells()
+    {
+        if (string.IsNullOrEmpty(_selectedTableText) || !Editor.Selection.IsEmpty) return false;
+        return TableClipboard.CopyWithNotice(_selectedTableText,
+            _selectedTableSingleCell ? "已复制单元格" : "已复制选中表格内容");
+    }
+
+    private void OnEditorCopying(object sender, DataObjectCopyingEventArgs e)
+    {
+        if (TryCopySelectedTableCells())
+        {
+            e.CancelCommand();
+            e.Handled = true;
+            return;
+        }
+
+        var selected = Editor.Selection.Text;
+        if (string.IsNullOrEmpty(selected) || !selected.Contains('|')) return;
+
+        var converted = TableClipboard.ConvertSelectionText(selected);
+        if (converted != selected)
+        {
+            TableClipboard.CopyWithNotice(converted, "已复制表格内容");
+            e.CancelCommand();
+            e.Handled = true;
+        }
     }
 
     private void OnExportPdf(object sender, RoutedEventArgs e)
@@ -1529,6 +1722,13 @@ public partial class MainWindow : Window
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+        // 预览/阅读模式下已点击选中表格单元格时,Ctrl+C 直接复制单元格/选中区域
+        if (ctrl && !shift && (e.Key == Key.C || e.Key == Key.Insert) && TryCopySelectedTableCells())
+        {
+            e.Handled = true;
+            return;
+        }
 
         // 阅读模式:仅允许退出与复制/全选,屏蔽编辑类快捷键
         if (_reading)

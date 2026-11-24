@@ -325,6 +325,7 @@
             <RichTextBox x:Name="Editor"
                          AcceptsReturn="True"
                          AcceptsTab="True"
+                         IsDocumentEnabled="True"
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Disabled"
                          FontFamily="Microsoft YaHei UI"
