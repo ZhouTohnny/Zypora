@@ -31,13 +31,19 @@
             <Setter Property="Foreground" Value="{DynamicResource Br.MenuFg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Br.MenuBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border Margin="6"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="4" SnapsToDevicePixels="True">
+                                CornerRadius="8" Padding="5" SnapsToDevicePixels="True">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.18" Color="#000000"/>
+                            </Border.Effect>
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                         </Border>
                     </ControlTemplate>
@@ -48,30 +54,33 @@
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource Br.MenuFg}"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Padding" Value="11,7"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
                         <Grid>
                             <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
-                                    CornerRadius="3" SnapsToDevicePixels="True">
+                                    CornerRadius="5" SnapsToDevicePixels="True">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border x:Name="CheckArea" Width="18" Visibility="Collapsed">
-                                        <TextBlock x:Name="CheckMark" Text="✓" FontSize="12"
-                                                   Foreground="{DynamicResource Br.CheckedFg}"
-                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                    </Border>
-                                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
-                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="{TemplateBinding InputGestureText}" Margin="28,0,2,0"
-                                                   Foreground="{DynamicResource Br.Muted}" FontSize="12"/>
-                                        <TextBlock x:Name="SubmenuArrow" Text="›" Margin="8,0,2,0"
-                                                   Foreground="{DynamicResource Br.Muted}" FontSize="13" Visibility="Collapsed"/>
+                                    <ContentPresenter Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="GestureText" Text="{TemplateBinding InputGestureText}" Margin="22,0,2,0"
+                                                   Foreground="{DynamicResource Br.Muted}" FontSize="12" VerticalAlignment="Center"/>
+                                        <Border x:Name="SwitchTrack" Width="34" Height="18" CornerRadius="9" Margin="18,0,0,0"
+                                                Background="{DynamicResource Br.PanelBorder}"
+                                                BorderBrush="{DynamicResource Br.Muted}" BorderThickness="1"
+                                                VerticalAlignment="Center" Visibility="Collapsed" SnapsToDevicePixels="True">
+                                            <Border x:Name="SwitchThumb" Width="12" Height="12" CornerRadius="6"
+                                                    Background="{DynamicResource Br.Muted}"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                                        </Border>
+                                        <TextBlock x:Name="SubmenuArrow" Text="›" Margin="10,0,2,0"
+                                                   Foreground="{DynamicResource Br.Muted}" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -79,27 +88,34 @@
                                    PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                    IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True"
                                    Focusable="False" PopupAnimation="None">
-                                <Border Background="{DynamicResource Br.MenuBg}" BorderBrush="{DynamicResource Br.MenuBorder}"
-                                        BorderThickness="1" CornerRadius="4" Padding="4" SnapsToDevicePixels="True">
+                                <Border Margin="4" Background="{DynamicResource Br.MenuBg}" BorderBrush="{DynamicResource Br.MenuBorder}"
+                                        BorderThickness="1" CornerRadius="8" Padding="5" SnapsToDevicePixels="True">
                                     <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                 </Border>
                             </Popup>
                         </Grid>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="InputGestureText" Value="">
+                                <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Br.MenuHover}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4"/>
+                                <Setter Property="Opacity" Value="0.45"/>
                             </Trigger>
                             <Trigger Property="HasItems" Value="True">
                                 <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
                             </Trigger>
                             <Trigger Property="IsCheckable" Value="True">
-                                <Setter TargetName="CheckArea" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="SwitchTrack" Property="Visibility" Value="Visible"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="SwitchTrack" Property="Background" Value="{DynamicResource Br.Checked}"/>
+                                <Setter TargetName="SwitchTrack" Property="BorderBrush" Value="{DynamicResource Br.CheckedFg}"/>
+                                <Setter TargetName="SwitchThumb" Property="Background" Value="{DynamicResource Br.CheckedFg}"/>
+                                <Setter TargetName="SwitchThumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="SwitchThumb" Property="Margin" Value="0,0,2,0"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -111,7 +127,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Separator">
-                        <Border Height="1" Margin="6,4" Background="{DynamicResource Br.MenuBorder}"/>
+                        <Border Height="1" Margin="6,5" Background="{DynamicResource Br.MenuBorder}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -125,6 +141,20 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="5" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Br.Hover}"/>
@@ -139,6 +169,20 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="5" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Br.Hover}"/>
@@ -218,23 +262,42 @@
                           StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                           Fill="Transparent"/>
                 </ToggleButton>
-                <TextBlock x:Name="FileStatusText" VerticalAlignment="Center" Margin="10,0,2,0" FontSize="12"
-                           Foreground="{DynamicResource Br.Muted}" Visibility="Collapsed"/>
-                <TextBlock x:Name="UpdateStatusText" VerticalAlignment="Center" Margin="10,0,2,0" FontSize="12"
-                           Foreground="{DynamicResource Br.Muted}" Visibility="Collapsed"/>
                 <Button x:Name="SettingsMenuButton" Padding="10,5" Style="{StaticResource ToolbarButton}" ToolTip="设置" Click="OnSettingsMenu">
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="VersionInfoItem" Header="版本" IsEnabled="False"/>
+                            <MenuItem x:Name="VersionInfoItem" Header="版本" FontSize="12"
+                                      Foreground="{DynamicResource Br.Muted}" IsHitTestVisible="False" Focusable="False"/>
                             <Separator Style="{StaticResource MenuSeparator}"/>
-                            <MenuItem x:Name="UpdateManageItem" Header="更新管理">
-                                <MenuItem x:Name="AutoUpdateItem" Header="自动更新" IsCheckable="True" Click="OnToggleAutoUpdate"/>
-                                <MenuItem x:Name="CheckUpdateItem" Header="检查更新…" Click="OnCheckUpdate"/>
-                            </MenuItem>
+                            <MenuItem x:Name="AutoUpdateItem" Header="自动更新" IsCheckable="True" StaysOpenOnClick="True" Click="OnToggleAutoUpdate"/>
+                            <MenuItem x:Name="CheckUpdateItem" Header="检查更新…" Click="OnCheckUpdate"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                     <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center"/>
                 </Button>
+                <Border x:Name="FileStatusBadge" VerticalAlignment="Center" Margin="8,0,2,0"
+                        Padding="10,4" CornerRadius="11"
+                        Background="{DynamicResource Br.Hover}"
+                        BorderBrush="{DynamicResource Br.PanelBorder}" BorderThickness="1"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="6" Height="6" Fill="{DynamicResource Br.CheckedFg}"
+                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="FileStatusText" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="{DynamicResource Br.Fg}" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="UpdateStatusBadge" VerticalAlignment="Center" Margin="8,0,2,0"
+                        Padding="10,4" CornerRadius="11"
+                        Background="{DynamicResource Br.Hover}"
+                        BorderBrush="{DynamicResource Br.PanelBorder}" BorderThickness="1"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="6" Height="6" Fill="{DynamicResource Br.CheckedFg}"
+                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="UpdateStatusText" VerticalAlignment="Center" FontSize="12"
+                                   Foreground="{DynamicResource Br.Fg}" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
             </WrapPanel>
         </Border>
 

@@ -1126,24 +1126,13 @@ internal static class WindowTests
 
     private static string Source(object w) => (string)Call(w, "GetSourceText")!;
 
-    private static bool ContainsPopup(DependencyObject? node)
+    private static bool ContainsNamedBorder(DependencyObject? node, string name)
     {
         if (node == null) return false;
-        if (node is System.Windows.Controls.Primitives.Popup) return true;
+        if (node is Border b && b.Name == name) return true;
         foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(node))
         {
-            if (ContainsPopup(child as DependencyObject)) return true;
-        }
-        return false;
-    }
-
-    private static bool ContainsText(DependencyObject? node, string text)
-    {
-        if (node == null) return false;
-        if (node is TextBlock tb && tb.Text == text) return true;
-        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(node))
-        {
-            if (ContainsText(child as DependencyObject, text)) return true;
+            if (ContainsNamedBorder(child as DependencyObject, name)) return true;
         }
         return false;
     }
@@ -1213,22 +1202,29 @@ internal static class WindowTests
         T.Ok("welcome not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
         T.Eq("window title", "Zypora", w.Title);
 
-        var settingsMenu = ((Button)w.FindName("SettingsMenuButton")).ContextMenu;
+        var settingsButton = (Button)w.FindName("SettingsMenuButton");
+        T.Ok("toolbar button no focus dotted rect", settingsButton.FocusVisualStyle == null);
+        var settingsMenu = settingsButton.ContextMenu;
         T.Ok("settings menu exists", settingsMenu != null);
-        var manage = settingsMenu!.Items.OfType<MenuItem>().FirstOrDefault(m => m.Name == "UpdateManageItem");
-        T.Ok("update manage submenu exists", manage != null);
-        T.Eq("update manage header", "更新管理", manage?.Header as string);
-        var autoItem = manage!.Items.OfType<MenuItem>().FirstOrDefault(m => m.Name == "AutoUpdateItem");
-        T.Ok("auto update checkable", autoItem?.IsCheckable == true);
-        T.Ok("check update nested", manage.Items.OfType<MenuItem>().Any(m => m.Name == "CheckUpdateItem"));
+        T.Ok("settings menu is flat (no nested submenu)",
+            !settingsMenu!.Items.OfType<MenuItem>().Any(m => m.Name == "UpdateManageItem"));
+        var autoItem = settingsMenu.Items.OfType<MenuItem>().FirstOrDefault(m => m.Name == "AutoUpdateItem");
+        T.Ok("auto update top-level checkable", autoItem?.IsCheckable == true);
+        T.Ok("check update top-level", settingsMenu.Items.OfType<MenuItem>().Any(m => m.Name == "CheckUpdateItem"));
 
         var menuStyle = w.FindResource(typeof(MenuItem)) as Style;
         var menuTemplate = menuStyle?.Setters.OfType<Setter>()
             .FirstOrDefault(s => s.Property == Control.TemplateProperty)?.Value as ControlTemplate;
         T.Ok("menu style template exists", menuTemplate != null);
         var templateRoot = menuTemplate?.LoadContent() as DependencyObject;
-        T.Ok("menu template supports submenu", ContainsPopup(templateRoot));
-        T.Ok("menu template has check mark", ContainsText(templateRoot, "✓"));
+        T.Ok("menu template has toggle switch track", ContainsNamedBorder(templateRoot, "SwitchTrack"));
+
+        var toolbar = (Border)w.FindName("ToolbarBorder");
+        var toolbarPanel = (Panel)toolbar.Child;
+        var updateBadge = (FrameworkElement)w.FindName("UpdateStatusBadge");
+        int gearIdx = toolbarPanel.Children.IndexOf(settingsButton);
+        int badgeIdx = toolbarPanel.Children.IndexOf(updateBadge);
+        T.Ok("status badge placed after gear button", gearIdx >= 0 && badgeIdx > gearIdx);
 
         Call(w, "ClearDocument", true);
         T.Ok("cleared empty not dirty", !(bool)Call(w, "HasUnsavedChanges")!);

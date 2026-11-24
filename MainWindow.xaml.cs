@@ -1065,10 +1065,12 @@ public partial class MainWindow : Window
         {
             FileStatusText.Text = "";
             FileStatusText.Visibility = Visibility.Collapsed;
+            FileStatusBadge.Visibility = Visibility.Collapsed;
             return;
         }
         FileStatusText.Text = text;
         FileStatusText.Visibility = Visibility.Visible;
+        FileStatusBadge.Visibility = Visibility.Visible;
     }
 
     internal string? CurrentFilePath => _currentFile;
@@ -1096,22 +1098,22 @@ public partial class MainWindow : Window
 
         if (settings.AutoUpdate)
         {
-            ShowUpdateStatus("自动更新已开启:新版本将在退出时安装", 4000);
+            ShowUpdateStatus("已开启自动更新 · 退出时静默安装", 4000);
         }
         else if (UpdateCenter.Shared.IsReady && UpdateCenter.Shared.ReadyInfo is { } ready)
         {
-            ShowUpdateStatus($"自动更新已关闭;新版本 v{ready.Version} 已就绪,可手动安装", 6000);
+            ShowUpdateStatus($"已关闭自动更新 · v{ready.Version} 已就绪", 6000);
         }
         else
         {
-            ShowUpdateStatus("自动更新已关闭", 4000);
+            ShowUpdateStatus("已关闭自动更新", 4000);
         }
     }
 
     /// <summary>自动更新关闭时,提示新版本已下载就绪。</summary>
     internal void ShowUpdateReadyHint(UpdateInfo info)
     {
-        ShowUpdateStatus($"新版本 v{info.Version} 已就绪,可在 设置 → 更新管理 中安装", 0);
+        ShowUpdateStatus($"新版本 v{info.Version} 已就绪 · 可在设置中安装", 0);
     }
 
     private async Task CheckForUpdatesManuallyAsync()
@@ -1169,6 +1171,7 @@ public partial class MainWindow : Window
     {
         UpdateStatusText.Text = text;
         UpdateStatusText.Visibility = Visibility.Visible;
+        UpdateStatusBadge.Visibility = Visibility.Visible;
         _statusTimer.Stop();
         if (autoHideMs > 0)
         {
@@ -1181,6 +1184,7 @@ public partial class MainWindow : Window
     {
         _statusTimer.Stop();
         UpdateStatusText.Visibility = Visibility.Collapsed;
+        UpdateStatusBadge.Visibility = Visibility.Collapsed;
     }
 
     // 有未保存改动时询问;返回 false 表示用户取消(应中止当前操作)
