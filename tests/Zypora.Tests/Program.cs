@@ -1275,7 +1275,9 @@ internal static class TableClipboardTests
         T.Eq("row menu count", 1, rowVisual.ContextMenu!.Items.Count);
         T.Eq("row menu header", "复制整个表格", ((System.Windows.Controls.MenuItem)rowVisual.ContextMenu.Items[0]).Header);
 
+        T.Ok("row hit-test background", rowVisual.Background != null);
         var cellVisual = (System.Windows.Controls.Border)((System.Windows.Controls.Grid)rowVisual.Child).Children[0];
+        T.Ok("cell hit-test background", cellVisual.Background != null);
         T.Ok("cell menu exists", cellVisual.ContextMenu != null);
         T.Eq("cell menu count", 2, cellVisual.ContextMenu!.Items.Count);
         T.Eq("cell menu first", "复制单元格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[0]).Header);

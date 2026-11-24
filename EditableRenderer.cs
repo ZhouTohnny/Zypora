@@ -482,6 +482,8 @@ public static class EditableRenderer
 
             var border = new Border
             {
+                // 透明背景让单元格留白区域也能命中鼠标(否则右键菜单只在文字上才响应)
+                Background = Brushes.Transparent,
                 BorderBrush = header ? t.GridLineStrong : t.GridLine,
                 BorderThickness = header ? new Thickness(0, 0, 1, 2) : new Thickness(0, 0, 1, 1),
                 Padding = new Thickness(8, 4, 8, 4),
@@ -494,6 +496,7 @@ public static class EditableRenderer
 
         return new Border
         {
+            Background = Brushes.Transparent,
             BorderBrush = t.GridLine,
             BorderThickness = new Thickness(1, 1, 0, 0),
             Child = grid,
