@@ -1077,6 +1077,7 @@ public partial class MainWindow : Window
 
     private void OnSettingsMenu(object sender, RoutedEventArgs e)
     {
+        AutoUpdateItem.IsChecked = SettingsStore.Load(SettingsStore.DefaultDir).AutoUpdate;
         var cm = SettingsMenuButton.ContextMenu;
         if (cm == null) return;
         cm.PlacementTarget = SettingsMenuButton;
@@ -1085,6 +1086,33 @@ public partial class MainWindow : Window
     }
 
     private async void OnCheckUpdate(object sender, RoutedEventArgs e) => await CheckForUpdatesManuallyAsync();
+
+    private void OnToggleAutoUpdate(object sender, RoutedEventArgs e)
+    {
+        var settings = SettingsStore.Load(SettingsStore.DefaultDir);
+        settings.AutoUpdate = AutoUpdateItem.IsChecked;
+        SettingsStore.Save(SettingsStore.DefaultDir, settings);
+        _settings = settings;
+
+        if (settings.AutoUpdate)
+        {
+            ShowUpdateStatus("自动更新已开启:新版本将在退出时安装", 4000);
+        }
+        else if (UpdateCenter.Shared.IsReady && UpdateCenter.Shared.ReadyInfo is { } ready)
+        {
+            ShowUpdateStatus($"自动更新已关闭;新版本 v{ready.Version} 已就绪,可手动安装", 6000);
+        }
+        else
+        {
+            ShowUpdateStatus("自动更新已关闭", 4000);
+        }
+    }
+
+    /// <summary>自动更新关闭时,提示新版本已下载就绪。</summary>
+    internal void ShowUpdateReadyHint(UpdateInfo info)
+    {
+        ShowUpdateStatus($"新版本 v{info.Version} 已就绪,可在 设置 → 更新管理 中安装", 0);
+    }
 
     private async Task CheckForUpdatesManuallyAsync()
     {
@@ -1112,7 +1140,7 @@ public partial class MainWindow : Window
 
             // 手动检查不受「跳过此版本」限制,用户主动要看就给结果
             ShowUpdateStatus($"发现新版本 v{info.Version}", 0);
-            var win = new UpdateWindow(info, AppContext.BaseDirectory, current, _theme) { Owner = this };
+            var win = new UpdateWindow(info, AppContext.BaseDirectory, current, _theme, UpdateCenter.Shared) { Owner = this };
             win.ShowDialog();
 
             if (win.SkipRequested)

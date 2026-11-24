@@ -8,12 +8,16 @@ public partial class UpdateWindow : Window
 {
     private readonly UpdateInfo _info;
     private readonly string _appDir;
+    private readonly UpdateCenter? _center;
     private CancellationTokenSource? _cts;
     private bool _updating;
 
-    public UpdateWindow(UpdateInfo info, string appDir, string currentVersion, AppTheme theme = AppTheme.Light)
+    public UpdateWindow(UpdateInfo info, string appDir, string currentVersion, AppTheme theme = AppTheme.Light,
+        UpdateCenter? center = null)
     {
         InitializeComponent();
+
+        _center = center;
 
         var c = ChromeTheme.Of(theme);
         Resources["Br.WindowBg"] = new SolidColorBrush(c.WindowBg);
@@ -39,10 +43,19 @@ public partial class UpdateWindow : Window
             NotesText.Text = notes;
             NotesBox.Visibility = Visibility.Visible;
         }
+
+        if (IsUpdateReady)
+        {
+            UpdateButton.Content = "立即更新(已就绪)";
+        }
     }
 
     /// <summary>用户选择了"以后再说"。</summary>
     public bool SkipRequested { get; private set; }
+
+    internal bool IsUpdateReady =>
+        _center?.IsReady == true && _center.ReadyInfo != null &&
+        string.Equals(_center.ReadyInfo.Version, _info.Version, StringComparison.OrdinalIgnoreCase);
 
     private void OnLater(object sender, RoutedEventArgs e)
     {
@@ -71,8 +84,11 @@ public partial class UpdateWindow : Window
             var zip = Path.Combine(dir, UpdateService.ZipName);
             var extract = Path.Combine(dir, "extract");
 
-            StatusText.Text = "正在下载更新…";
-            if (!await UpdateService.DownloadAsync(_info, zip, progress, _cts.Token))
+            StatusText.Text = IsUpdateReady ? "更新包已就绪,正在安装…" : "正在下载更新…";
+            var downloaded = _center != null
+                ? await _center.EnsureReadyAsync(_info, progress, _cts.Token)
+                : await UpdateService.DownloadAsync(_info, zip, progress, _cts.Token);
+            if (!downloaded)
             {
                 Fail("更新失败:无法下载更新包,请稍后重试");
                 return;
@@ -95,6 +111,7 @@ public partial class UpdateWindow : Window
 
             // 记录本次更新内容,新版本首次启动时提示
             UpdateService.WritePendingInfo(SettingsStore.DefaultDir, _info.Version, _info.ChangelogOrNotes);
+            _center?.MarkInstalled();
 
             // 更新前已确认过未保存改动,关闭时不再重复弹窗拦截 Shutdown
             foreach (var w in Application.Current.Windows.OfType<MainWindow>())

@@ -805,6 +805,16 @@ internal static class SettingsTests
 
         var def = SettingsStore.Load(dir);
         T.Ok("settings default light", !def.DarkMode);
+        T.Ok("auto update default on", def.AutoUpdate);
+
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "settings.json"), "{\"Theme\":\"dark\"}");
+        var oldJson = SettingsStore.Load(dir);
+        T.Ok("auto update defaults on for old config", oldJson.AutoUpdate);
+        T.Eq("theme survives old config", "dark", oldJson.Theme);
+
+        SettingsStore.Save(dir, new AppSettings { AutoUpdate = false });
+        T.Ok("auto update roundtrip off", !SettingsStore.Load(dir).AutoUpdate);
 
         SettingsStore.Save(dir, new AppSettings { DarkMode = true });
         var loaded = SettingsStore.Load(dir);
@@ -1116,6 +1126,28 @@ internal static class WindowTests
 
     private static string Source(object w) => (string)Call(w, "GetSourceText")!;
 
+    private static bool ContainsPopup(DependencyObject? node)
+    {
+        if (node == null) return false;
+        if (node is System.Windows.Controls.Primitives.Popup) return true;
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(node))
+        {
+            if (ContainsPopup(child as DependencyObject)) return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsText(DependencyObject? node, string text)
+    {
+        if (node == null) return false;
+        if (node is TextBlock tb && tb.Text == text) return true;
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(node))
+        {
+            if (ContainsText(child as DependencyObject, text)) return true;
+        }
+        return false;
+    }
+
     private static bool PumpUntil(Func<bool> cond, int timeoutMs)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -1155,12 +1187,48 @@ internal static class WindowTests
         T.Eq("update falls back to changelog", "修复 B", ((TextBlock)changelog.FindName("NotesText")).Text);
         changelog.Close();
 
+        var temp = Path.Combine(Path.GetTempPath(), "zypora-uw-" + Guid.NewGuid().ToString("N"));
+        var readyInfo = new UpdateInfo { Version = "9.9.9", Url = "https://x/y.zip" };
+        var center = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(readyInfo),
+            download: (i, dest, p, ct) =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.WriteAllText(dest, "zip");
+                return Task.FromResult(true);
+            },
+            tempDir: v => Path.Combine(temp, v));
+        T.Ok("update center primed", center.EnsureReadyAsync(readyInfo, null, CancellationToken.None).GetAwaiter().GetResult());
+        var readyWin = new UpdateWindow(readyInfo, AppContext.BaseDirectory, "1.0.0", AppTheme.Dark, center);
+        var readyProp = typeof(UpdateWindow).GetProperty("IsUpdateReady",
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        T.Ok("update window sees ready package", readyProp?.GetValue(readyWin) as bool? == true);
+        readyWin.Close();
+        try { Directory.Delete(temp, true); } catch { }
+
         T.Section("MainWindow");
 
         var w = new MainWindow();
         var welcome = Source(w);
         T.Ok("welcome not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
         T.Eq("window title", "Zypora", w.Title);
+
+        var settingsMenu = ((Button)w.FindName("SettingsMenuButton")).ContextMenu;
+        T.Ok("settings menu exists", settingsMenu != null);
+        var manage = settingsMenu!.Items.OfType<MenuItem>().FirstOrDefault(m => m.Name == "UpdateManageItem");
+        T.Ok("update manage submenu exists", manage != null);
+        T.Eq("update manage header", "更新管理", manage?.Header as string);
+        var autoItem = manage!.Items.OfType<MenuItem>().FirstOrDefault(m => m.Name == "AutoUpdateItem");
+        T.Ok("auto update checkable", autoItem?.IsCheckable == true);
+        T.Ok("check update nested", manage.Items.OfType<MenuItem>().Any(m => m.Name == "CheckUpdateItem"));
+
+        var menuStyle = w.FindResource(typeof(MenuItem)) as Style;
+        var menuTemplate = menuStyle?.Setters.OfType<Setter>()
+            .FirstOrDefault(s => s.Property == Control.TemplateProperty)?.Value as ControlTemplate;
+        T.Ok("menu style template exists", menuTemplate != null);
+        var templateRoot = menuTemplate?.LoadContent() as DependencyObject;
+        T.Ok("menu template supports submenu", ContainsPopup(templateRoot));
+        T.Ok("menu template has check mark", ContainsText(templateRoot, "✓"));
 
         Call(w, "ClearDocument", true);
         T.Ok("cleared empty not dirty", !(bool)Call(w, "HasUnsavedChanges")!);
@@ -1354,6 +1422,178 @@ internal static class ExternalFileChangeTests
     }
 }
 
+internal static class UpdateCenterTests
+{
+    private static bool WaitUntil(Func<bool> cond, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (cond()) return true;
+            System.Threading.Thread.Sleep(25);
+        }
+        return cond();
+    }
+
+    private static UpdateInfo Info(string version) => new() { Version = version, Url = "https://x/y.zip" };
+
+    private static void CreateZip(string path, string entryName, string content)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        using var fs = File.Create(path);
+        using var za = new System.IO.Compression.ZipArchive(fs, System.IO.Compression.ZipArchiveMode.Create);
+        var entry = za.CreateEntry(entryName);
+        using var w = new StreamWriter(entry.Open());
+        w.Write(content);
+    }
+
+    public static void Run()
+    {
+        T.Section("UpdateCenter");
+        var root = Path.Combine(Path.GetTempPath(), "zypora-center-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        // 新版本 → 后台下载一次 → 就绪
+        int downloads = 0;
+        var info = Info("9.0.1");
+        var center = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(info),
+            download: (i, dest, p, ct) =>
+            {
+                downloads++;
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.WriteAllText(dest, "zip");
+                p?.Report(1);
+                return Task.FromResult(true);
+            },
+            tempDir: v => Path.Combine(root, "u", v));
+
+        center.StartBackground("9.0.0", new AppSettings()).GetAwaiter().GetResult();
+        T.Ok("center ready after prefetch", WaitUntil(() => center.IsReady, 3000), "downloads=" + downloads);
+        T.Eq("center downloads once", 1, downloads);
+        T.Eq("center ready version", "9.0.1", center.ReadyInfo?.Version);
+        T.Ok("center ready file", File.Exists(Path.Combine(root, "u", "9.0.1", UpdateService.ZipName)));
+        T.Ok("ensure ready reuses package", center.EnsureReadyAsync(info, null, CancellationToken.None).GetAwaiter().GetResult());
+        T.Eq("center still one download", 1, downloads);
+
+        // 同版本 / 旧版本不下载
+        downloads = 0;
+        var same = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(Info("9.0.1")),
+            download: (i, dest, p, ct) => { downloads++; return Task.FromResult(true); },
+            tempDir: v => Path.Combine(root, "u2", v));
+        same.StartBackground("9.0.1", new AppSettings()).GetAwaiter().GetResult();
+        T.Ok("center ignores same version", !same.IsReady && downloads == 0);
+
+        // 跳过此版本不预下载
+        downloads = 0;
+        var skipped = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(Info("9.0.2")),
+            download: (i, dest, p, ct) => { downloads++; return Task.FromResult(true); },
+            tempDir: v => Path.Combine(root, "u3", v));
+        skipped.StartBackground("9.0.1", new AppSettings { SkippedVersion = "9.0.2" }).GetAwaiter().GetResult();
+        T.Ok("center respects skipped version", !skipped.IsReady && downloads == 0);
+
+        // 临时目录已有校验通过的同版本包 → 直接就绪
+        downloads = 0;
+        var cachedInfo = Info("9.0.3");
+        var cachedZip = Path.Combine(root, "u4", "9.0.3", UpdateService.ZipName);
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedZip)!);
+        File.WriteAllText(cachedZip, "cached");
+        var cached = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(cachedInfo),
+            download: (i, dest, p, ct) => { downloads++; return Task.FromResult(true); },
+            tempDir: v => Path.Combine(root, "u4", v));
+        cached.StartBackground("9.0.0", new AppSettings()).GetAwaiter().GetResult();
+        T.Ok("center reuses cached package", cached.IsReady && downloads == 0);
+
+        // 并发请求只下载一次,两个订阅都收到进度
+        downloads = 0;
+        var gate = new ManualResetEventSlim(false);
+        var progress1 = new CollectProgress();
+        var progress2 = new CollectProgress();
+        var single = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(Info("9.0.4")),
+            download: async (i, dest, p, ct) =>
+            {
+                downloads++;
+                await Task.Run(() => gate.Wait(3000));
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.WriteAllText(dest, "zip");
+                p?.Report(1);
+                return true;
+            },
+            tempDir: v => Path.Combine(root, "u5", v));
+        var t1 = single.EnsureReadyAsync(Info("9.0.4"), progress1, CancellationToken.None);
+        var t2 = single.EnsureReadyAsync(Info("9.0.4"), progress2, CancellationToken.None);
+        gate.Set();
+        T.Ok("center single flight 1", t1.GetAwaiter().GetResult());
+        T.Ok("center single flight 2", t2.GetAwaiter().GetResult());
+        T.Eq("center single download", 1, downloads);
+        T.Ok("center progress to both", WaitUntil(() => progress1.Last >= 1 && progress2.Last >= 1, 1000));
+
+        // 失败不就绪,下一次重试
+        downloads = 0;
+        bool fail = true;
+        var retry = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(Info("9.0.5")),
+            download: (i, dest, p, ct) =>
+            {
+                downloads++;
+                if (fail) return Task.FromResult(false);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.WriteAllText(dest, "zip");
+                return Task.FromResult(true);
+            },
+            tempDir: v => Path.Combine(root, "u6", v));
+        T.Ok("center failure not ready", !retry.EnsureReadyAsync(Info("9.0.5"), null, CancellationToken.None).GetAwaiter().GetResult());
+        fail = false;
+        T.Ok("center retry succeeds", retry.EnsureReadyAsync(Info("9.0.5"), null, CancellationToken.None).GetAwaiter().GetResult());
+        T.Eq("center retried download", 2, downloads);
+
+        // 退出时安装:解压并替换 exe,写 pending 说明;重复调用不生效
+        var appDir = Path.Combine(root, "app");
+        Directory.CreateDirectory(appDir);
+        File.WriteAllText(Path.Combine(appDir, UpdateService.ExeName), "old");
+        var applyInfo = Info("9.0.6");
+        var apply = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(applyInfo),
+            download: (i, dest, p, ct) =>
+            {
+                CreateZip(dest, UpdateService.ExeName, "new-exe");
+                return Task.FromResult(true);
+            },
+            tempDir: v => Path.Combine(root, "u7", v));
+        T.Ok("apply center ready", apply.EnsureReadyAsync(applyInfo, null, CancellationToken.None).GetAwaiter().GetResult());
+        T.Ok("apply at exit swaps exe", apply.ApplyReadyAtExit(appDir, root));
+        T.Eq("apply at exit content", "new-exe", File.ReadAllText(Path.Combine(appDir, UpdateService.ExeName)));
+        T.Ok("apply at exit writes pending", File.Exists(Path.Combine(root, UpdateService.PendingInfoFileName)));
+        T.Ok("apply at exit only once", !apply.ApplyReadyAtExit(appDir, root));
+        T.Ok("apply after mark installed skipped", !CenterReadyForApply(root, "u8").ApplyReadyAtExit(appDir, root));
+
+        try { Directory.Delete(root, true); } catch { }
+    }
+
+    private static UpdateCenter CenterReadyForApply(string root, string dir)
+    {
+        var info = Info("9.0.7");
+        var center = new UpdateCenter(
+            check: _ => Task.FromResult<UpdateInfo?>(info),
+            download: (i, dest, p, ct) => { CreateZip(dest, UpdateService.ExeName, "x"); return Task.FromResult(true); },
+            tempDir: v => Path.Combine(root, dir, v));
+        center.EnsureReadyAsync(info, null, CancellationToken.None).GetAwaiter().GetResult();
+        center.MarkInstalled();
+        return center;
+    }
+
+    private sealed class CollectProgress : IProgress<double>
+    {
+        public double Last;
+        public void Report(double value) => Last = value;
+    }
+}
+
 internal static class Program
 {
     [STAThread]
@@ -1376,6 +1616,7 @@ internal static class Program
         RunGroup("TableFit", TableFitTests.Run);
         RunGroup("TableClipboard", TableClipboardTests.Run);
         RunGroup("Update", UpdateTests.Run);
+        RunGroup("UpdateCenter", UpdateCenterTests.Run);
         RunGroup("ExternalFileChange", ExternalFileChangeTests.Run);
         RunGroup("Windows", WindowTests.Run);
         return T.Report();

@@ -52,24 +52,54 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
-                                CornerRadius="3" SnapsToDevicePixels="True">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ContentPresenter Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Margin="28,0,2,0"
-                                           Foreground="{DynamicResource Br.Muted}" FontSize="12" VerticalAlignment="Center"/>
-                            </Grid>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}"
+                                    CornerRadius="3" SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="CheckArea" Width="18" Visibility="Collapsed">
+                                        <TextBlock x:Name="CheckMark" Text="✓" FontSize="12"
+                                                   Foreground="{DynamicResource Br.CheckedFg}"
+                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                    </Border>
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="{TemplateBinding InputGestureText}" Margin="28,0,2,0"
+                                                   Foreground="{DynamicResource Br.Muted}" FontSize="12"/>
+                                        <TextBlock x:Name="SubmenuArrow" Text="›" Margin="8,0,2,0"
+                                                   Foreground="{DynamicResource Br.Muted}" FontSize="13" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup" Placement="Right"
+                                   PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}" AllowsTransparency="True"
+                                   Focusable="False" PopupAnimation="None">
+                                <Border Background="{DynamicResource Br.MenuBg}" BorderBrush="{DynamicResource Br.MenuBorder}"
+                                        BorderThickness="1" CornerRadius="4" Padding="4" SnapsToDevicePixels="True">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Br.MenuHover}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsCheckable" Value="True">
+                                <Setter TargetName="CheckArea" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -197,7 +227,10 @@
                         <ContextMenu>
                             <MenuItem x:Name="VersionInfoItem" Header="版本" IsEnabled="False"/>
                             <Separator Style="{StaticResource MenuSeparator}"/>
-                            <MenuItem x:Name="CheckUpdateItem" Header="检查更新…" Click="OnCheckUpdate"/>
+                            <MenuItem x:Name="UpdateManageItem" Header="更新管理">
+                                <MenuItem x:Name="AutoUpdateItem" Header="自动更新" IsCheckable="True" Click="OnToggleAutoUpdate"/>
+                                <MenuItem x:Name="CheckUpdateItem" Header="检查更新…" Click="OnCheckUpdate"/>
+                            </MenuItem>
                         </ContextMenu>
                     </Button.ContextMenu>
                     <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="15" VerticalAlignment="Center"/>

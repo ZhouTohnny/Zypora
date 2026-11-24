@@ -42,49 +42,34 @@ public partial class App : Application
 
         if (!StartupArgs.HasNoUpdateCheck(e.Args))
         {
-            _ = Task.Run(() => CheckForUpdatesAsync(main));
+            var settings = SettingsStore.Load(SettingsStore.DefaultDir);
+            var center = UpdateCenter.Shared;
+            center.Ready += info => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 自动更新开启时保持静默;关闭时提示已就绪
+                if (SettingsStore.Load(SettingsStore.DefaultDir).AutoUpdate) return;
+                foreach (var window in Windows.OfType<MainWindow>())
+                {
+                    window.ShowUpdateReadyHint(info);
+                }
+            }));
+            _ = center.StartBackground(UpdateService.CurrentVersion(), settings);
         }
     }
 
-    /// <summary>后台检查更新:任何失败都静默,不影响使用。</summary>
-    private async Task CheckForUpdatesAsync(Window owner)
+    protected override void OnExit(ExitEventArgs e)
     {
-        UpdateInfo? info;
         try
         {
-            info = await UpdateService.CheckAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            return;
-        }
-
-        if (info == null || owner.Dispatcher.HasShutdownStarted) return;
-
-        try
-        {
-            owner.Dispatcher.Invoke(() =>
+            if (SettingsStore.Load(SettingsStore.DefaultDir).AutoUpdate)
             {
-                var current = UpdateService.CurrentVersion();
-                if (!UpdateService.IsNewer(info.Version, current)) return;
-
-                var settings = SettingsStore.Load(SettingsStore.DefaultDir);
-                if (string.Equals(settings.SkippedVersion, info.Version, StringComparison.OrdinalIgnoreCase)) return;
-
-                var win = new UpdateWindow(info, AppContext.BaseDirectory, current, settings.ResolveTheme()) { Owner = owner };
-                win.ShowDialog();
-
-                if (win.SkipRequested)
-                {
-                    var s = SettingsStore.Load(SettingsStore.DefaultDir);
-                    s.SkippedVersion = info.Version;
-                    SettingsStore.Save(SettingsStore.DefaultDir, s);
-                }
-            });
+                UpdateCenter.Shared.ApplyReadyAtExit(AppContext.BaseDirectory, SettingsStore.DefaultDir);
+            }
         }
         catch
         {
-            // 静默
+            // 静默:安装失败不影响退出,下次启动仍可用旧版
         }
+        base.OnExit(e);
     }
 }

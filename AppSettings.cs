@@ -13,6 +13,9 @@ public sealed class AppSettings
     // 用户选择"以后再说"的版本号:该版本不再提示
     public string? SkippedVersion { get; set; }
 
+    // 后台预下载完成后,退出时自动安装更新(默认开启)
+    public bool AutoUpdate { get; set; } = true;
+
     public AppTheme ResolveTheme() =>
         string.IsNullOrWhiteSpace(Theme)
             ? (DarkMode ? AppTheme.Dark : AppTheme.Light)
