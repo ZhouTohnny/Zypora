@@ -156,6 +156,7 @@ public partial class MainWindow : Window
         _renderTimer.Stop();
         _renderQueued = false;
         ClearTableSelection();
+        EndTableDrag();
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
@@ -1245,15 +1246,11 @@ public partial class MainWindow : Window
         if (cell == null)
         {
             ClearTableSelection();
+            EndTableDrag();
             return;
         }
 
-        _tableDragAnchor = cell;
-        SelectTableCellRange(cell, cell);
-        if (!Editor.Selection.IsEmpty)
-        {
-            Editor.Selection.Select(Editor.CaretPosition, Editor.CaretPosition);
-        }
+        BeginTableDrag(cell);
         Editor.Focus();
         e.Handled = true;
     }
@@ -1264,14 +1261,31 @@ public partial class MainWindow : Window
         var cell = EditableRenderer.HitTestTableCell(Editor, e.GetPosition(Editor));
         if (cell != null && ReferenceEquals(cell.Model, _tableDragAnchor.Model))
         {
-            SelectTableCellRange(_tableDragAnchor, cell);
+            ExtendTableDrag(cell);
         }
     }
 
     private void OnEditorPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        _tableDragAnchor = null;
+        EndTableDrag();
     }
+
+    /// <summary>开始表格拖选(锚点保持,直到鼠标抬起)。</summary>
+    internal void BeginTableDrag(TableCellInfo cell)
+    {
+        _tableDragAnchor = cell;
+        SelectTableCellRange(cell, cell);
+    }
+
+    /// <summary>把拖选范围从锚点扩展到当前单元格。</summary>
+    internal void ExtendTableDrag(TableCellInfo cell)
+    {
+        if (_tableDragAnchor == null) return;
+        if (!ReferenceEquals(cell.Model, _tableDragAnchor.Model)) return;
+        SelectTableCellRange(_tableDragAnchor, cell);
+    }
+
+    private void EndTableDrag() => _tableDragAnchor = null;
 
     private void OnEditorPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -1376,7 +1390,6 @@ public partial class MainWindow : Window
         _highlightedCells.Clear();
         _selectedTableText = null;
         _selectedTableSingleCell = false;
-        _tableDragAnchor = null;
     }
 
     private bool TryCopySelectedTableCells()

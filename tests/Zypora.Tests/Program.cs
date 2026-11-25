@@ -1256,6 +1256,23 @@ internal static class WindowTests
         T.Eq("selected multi table cell text", "功能\t快捷键\r\n查找\tCtrl+F\r\n替换\tCtrl+H\r\n加粗\tCtrl+B",
             typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
 
+        // 左键按下后拖动:锚点必须保持,范围随扫过的单元格扩展
+        Call(w, "ClearTableSelection");
+        Call(w, "BeginTableDrag", cellInfo0);
+        T.Eq("drag starts with anchor cell", "功能",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
+        Call(w, "ExtendTableDrag", cellInfoLast);
+        T.Eq("drag extends over swept cells", "功能\t快捷键\r\n查找\tCtrl+F\r\n替换\tCtrl+H\r\n加粗\tCtrl+B",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
+        Call(w, "ExtendTableDrag", cellInfo0);
+        T.Eq("drag can shrink back", "功能",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
+        Call(w, "ClearTableSelection");
+        Call(w, "EndTableDrag");
+        Call(w, "ExtendTableDrag", cellInfoLast);
+        T.Eq("drag needs anchor", "",
+            typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string ?? "");
+
         Call(w, "ShowFind", false);
         T.Eq("find bar shown", Visibility.Visible, findBar.Visibility);
         Call(w, "EnterReadingMode");
