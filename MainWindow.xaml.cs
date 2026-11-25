@@ -157,7 +157,6 @@ public partial class MainWindow : Window
         _renderQueued = false;
         ClearTableSelection();
         EndTableDrag();
-        TableCellCopyPopup.IsOpen = false;
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
@@ -1235,7 +1234,6 @@ public partial class MainWindow : Window
             return;
         }
         TableClipboard.Copied -= _onTableCopied;
-        TableCellCopyPopup.IsOpen = false;
         DetachFileMonitor();
         base.OnClosing(e);
     }
@@ -1244,7 +1242,6 @@ public partial class MainWindow : Window
 
     private void OnEditorPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        TableCellCopyPopup.IsOpen = false;
         var pt = e.GetPosition(Editor);
 
         // 点在单元格文字上:交给单元格内的只读文本控件做字符级选择
@@ -1281,16 +1278,6 @@ public partial class MainWindow : Window
     private void OnEditorPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         EndTableDrag();
-
-        // 在表格单元格内拖选了文字后,在鼠标位置弹出「复制」按钮
-        if (Keyboard.FocusedElement is System.Windows.Controls.RichTextBox cellRtb && IsTableCellText(cellRtb) && !cellRtb.Selection.IsEmpty)
-        {
-            ShowTableCellCopyPopup(cellRtb);
-        }
-        else
-        {
-            TableCellCopyPopup.IsOpen = false;
-        }
     }
 
     internal static bool IsTableCellText(DependencyObject? node)
@@ -1301,27 +1288,6 @@ public partial class MainWindow : Window
             node = LogicalTreeHelper.GetParent(node);
         }
         return false;
-    }
-
-    private System.Windows.Controls.RichTextBox? _copyPopupSource;
-
-    private void ShowTableCellCopyPopup(System.Windows.Controls.RichTextBox source)
-    {
-        _copyPopupSource = source;
-        TableCellCopyPopup.PlacementTarget = Editor;
-        TableCellCopyPopup.IsOpen = false;
-        TableCellCopyPopup.IsOpen = true;
-    }
-
-    private void OnCopySelectedTableCellText(object sender, RoutedEventArgs e)
-    {
-        TableCellCopyPopup.IsOpen = false;
-        var source = _copyPopupSource;
-        if (source == null) return;
-
-        var text = source.Selection.Text.TrimEnd('\r', '\n');
-        TableClipboard.CopyWithNotice(text, "已复制选中文字");
-        source.Focus();
     }
 
     /// <summary>开始表格拖选(锚点保持,直到鼠标抬起)。</summary>
@@ -1343,7 +1309,6 @@ public partial class MainWindow : Window
 
     private void OnEditorPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        TableCellCopyPopup.IsOpen = false;
         var pt = e.GetPosition(Editor);
         if (EditableRenderer.HitTestCellText(Editor, pt) != null)
         {
@@ -1810,13 +1775,6 @@ public partial class MainWindow : Window
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
 
-        if (e.Key == Key.Escape && TableCellCopyPopup.IsOpen)
-        {
-            TableCellCopyPopup.IsOpen = false;
-            e.Handled = true;
-            return;
-        }
-
         // 预览/阅读模式下已点击选中表格单元格时,Ctrl+C 直接复制单元格/选中区域
         if (ctrl && !shift && (e.Key == Key.C || e.Key == Key.Insert) && TryCopySelectedTableCells())
         {
@@ -1847,7 +1805,6 @@ public partial class MainWindow : Window
         {
             if (e.Key == Key.Escape)
             {
-                TableCellCopyPopup.IsOpen = false;
                 Editor.Focus();
                 e.Handled = true;
                 return;

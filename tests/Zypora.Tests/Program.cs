@@ -1265,8 +1265,7 @@ internal static class WindowTests
         var welcomeCell0 = (Border)((Grid)welcomeRow.Child).Children[0];
         var cellInfo0 = (TableCellInfo)welcomeCell0.Tag;
         var copyPopup = w.FindName("TableCellCopyPopup") as System.Windows.Controls.Primitives.Popup;
-        T.Ok("table copy popup exists", copyPopup != null);
-        T.Ok("table copy button exists", w.FindName("TableCellCopyButton") is Button);
+        T.Ok("table copy popup removed", copyPopup == null);
         var isCellText = typeof(MainWindow).GetMethod("IsTableCellText",
             BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
         T.Ok("cell text control detected", (bool)isCellText.Invoke(null, new object[] { welcomeCell0.Child })!);
