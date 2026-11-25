@@ -62,6 +62,7 @@ public partial class MainWindow : Window
 
     // ---- 预览表格鼠标选中与复制 ----
     private TableCellInfo? _tableDragAnchor;
+    private System.Windows.Controls.RichTextBox? _activeCellTextBox;
     private string? _selectedTableText;
     private bool _selectedTableSingleCell;
     private readonly List<System.Windows.Controls.Border> _highlightedCells = new();
@@ -155,6 +156,7 @@ public partial class MainWindow : Window
     {
         _renderTimer.Stop();
         _renderQueued = false;
+        SetActiveCellTextBox(null);
         ClearTableSelection();
         EndTableDrag();
         _suppressChanged = true;
@@ -216,6 +218,7 @@ public partial class MainWindow : Window
     private void OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         if (_suppressChanged || _composing) return;
+        if (!ReferenceEquals(e.OriginalSource, Editor)) return;
         int caret = DocumentCaret.GetCaretOffset(Editor.Document, Editor.CaretPosition);
         _undo.Change(GetSourceText(), caret);
         _groupTimer.Stop();
@@ -1245,13 +1248,15 @@ public partial class MainWindow : Window
         var pt = e.GetPosition(Editor);
 
         // 点在单元格文字上:交给单元格内的只读文本控件做字符级选择
-        if (EditableRenderer.HitTestCellText(Editor, pt) != null)
+        if (EditableRenderer.HitTestCellText(Editor, pt) is System.Windows.Controls.RichTextBox cellRtb)
         {
+            SetActiveCellTextBox(cellRtb);
             ClearTableSelection();
             EndTableDrag();
             return;
         }
 
+        SetActiveCellTextBox(null);
         var cell = EditableRenderer.HitTestTableCell(Editor, pt);
         if (cell == null)
         {
@@ -1263,6 +1268,23 @@ public partial class MainWindow : Window
         BeginTableDrag(cell);
         Editor.Focus();
         e.Handled = true;
+    }
+
+    internal void SetActiveCellTextBox(System.Windows.Controls.RichTextBox? cellRtb)
+    {
+        if (_activeCellTextBox != null && !ReferenceEquals(_activeCellTextBox, cellRtb))
+        {
+            try
+            {
+                _activeCellTextBox.Selection.Select(
+                    _activeCellTextBox.Document.ContentStart,
+                    _activeCellTextBox.Document.ContentStart);
+            }
+            catch
+            {
+            }
+        }
+        _activeCellTextBox = cellRtb;
     }
 
     private void OnEditorPreviewMouseMove(object sender, MouseEventArgs e)
@@ -1310,14 +1332,18 @@ public partial class MainWindow : Window
     private void OnEditorPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         var pt = e.GetPosition(Editor);
-        if (EditableRenderer.HitTestCellText(Editor, pt) != null)
+        if (EditableRenderer.HitTestCellText(Editor, pt) is System.Windows.Controls.RichTextBox cellRtb)
         {
-            // 单元格文字上右键:保留控件自己的文字菜单(复制选中文字)
+            // 单元格文字上右键:拦截默认右键落点移动光标(防止刚划选的几个字在菜单弹出前被取消选中)
+            SetActiveCellTextBox(cellRtb);
             ClearTableSelection();
             EndTableDrag();
+            cellRtb.Focus();
+            e.Handled = true;
             return;
         }
 
+        SetActiveCellTextBox(null);
         var cell = EditableRenderer.HitTestTableCell(Editor, pt);
         if (cell != null)
         {
@@ -1433,6 +1459,17 @@ public partial class MainWindow : Window
 
     private bool TryCopySelectedTableCells()
     {
+        var activeCell = _activeCellTextBox
+            ?? (Keyboard.FocusedElement as System.Windows.Controls.RichTextBox);
+        if (activeCell != null && IsTableCellText(activeCell) && !activeCell.Selection.IsEmpty)
+        {
+            var cellSel = activeCell.Selection.Text.TrimEnd('\r', '\n');
+            if (!string.IsNullOrEmpty(cellSel))
+            {
+                return TableClipboard.CopyWithNotice(cellSel, "已复制选中文字");
+            }
+        }
+
         if (string.IsNullOrEmpty(_selectedTableText) || !Editor.Selection.IsEmpty) return false;
         return TableClipboard.CopyWithNotice(_selectedTableText,
             _selectedTableSingleCell ? "已复制单元格" : "已复制选中表格内容");

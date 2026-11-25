@@ -528,6 +528,7 @@ public static class EditableRenderer
             Document = doc,
             IsReadOnly = true,
             IsReadOnlyCaretVisible = false,
+            IsInactiveSelectionHighlightEnabled = true,
             IsTabStop = false,
             Focusable = true,
             BorderThickness = new Thickness(0),
@@ -587,7 +588,12 @@ public static class EditableRenderer
             copySelection.Click += (_, _) =>
                 TableClipboard.CopyWithNotice(cellControl.Selection.Text.TrimEnd('\r', '\n'), "已复制选中文字");
             menu.Items.Add(copySelection);
-            menu.Opened += (_, _) => copySelection.IsEnabled = !cellControl.Selection.IsEmpty;
+            menu.Opened += (_, _) =>
+            {
+                bool hasSelection = !cellControl.Selection.IsEmpty;
+                copySelection.IsEnabled = hasSelection;
+                copySelection.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+            };
         }
 
         var copyCell = new MenuItem { Header = "复制单元格" };

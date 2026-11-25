@@ -1270,6 +1270,14 @@ internal static class WindowTests
             BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
         T.Ok("cell text control detected", (bool)isCellText.Invoke(null, new object[] { welcomeCell0.Child })!);
         T.Ok("editor is not cell text", !(bool)isCellText.Invoke(null, new object[] { editor })!);
+
+        var rtbCell0 = (RichTextBox)welcomeCell0.Child;
+        var rtbCell1 = (RichTextBox)((Border)((Grid)welcomeRow.Child).Children[1]).Child;
+        rtbCell0.Selection.Select(rtbCell0.Document.ContentStart, rtbCell0.Document.ContentEnd);
+        T.Ok("cell0 selection non-empty", !rtbCell0.Selection.IsEmpty);
+        Call(w, "SetActiveCellTextBox", rtbCell0);
+        Call(w, "SetActiveCellTextBox", rtbCell1);
+        T.Ok("switching active cell clears old cell selection", rtbCell0.Selection.IsEmpty);
         Call(w, "SelectTableCellRange", cellInfo0, cellInfo0);
         T.Eq("selected single table cell text", "功能",
             typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
@@ -1411,6 +1419,7 @@ internal static class TableClipboardTests
         T.Ok("cell text is selectable control", cellVisual.Child is System.Windows.Controls.Primitives.TextBoxBase);
         var cellRtb = cellVisual.Child as RichTextBox;
         T.Ok("cell text is read-only", cellRtb?.IsReadOnly == true);
+        T.Ok("cell text keeps highlight when menu opens", cellRtb?.IsInactiveSelectionHighlightEnabled == true);
         var cellRange = new WpfRange(cellRtb!.Document.ContentStart, cellRtb.Document.ContentEnd);
         T.Eq("cell text content", "A", cellRange.Text.Trim());
         cellRtb.Selection.Select(cellRtb.Document.ContentStart, cellRtb.Document.ContentEnd);
@@ -1448,6 +1457,7 @@ internal static class ExternalFileChangeTests
         T.Section("ExternalFileChange");
 
         T.Eq("decide ignore equal", ExternalFileDecision.Ignore, ExternalFileChange.Decide("a", "a", true));
+        T.Eq("decide ignore lf vs crlf", ExternalFileDecision.Ignore, ExternalFileChange.Decide("a\nb\n", "a\r\nb\r\n", true));
         T.Eq("decide reload clean", ExternalFileDecision.Reload, ExternalFileChange.Decide("b", "a", false));
         T.Eq("decide conflict dirty", ExternalFileDecision.Conflict, ExternalFileChange.Decide("b", "a", true));
 

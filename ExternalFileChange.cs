@@ -11,9 +11,15 @@ public enum ExternalFileDecision
 
 public static class ExternalFileChange
 {
+    public static string NormalizeLineEndings(string? text)
+        => (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n');
+
     public static ExternalFileDecision Decide(string diskText, string currentText, bool dirty)
     {
-        if (diskText == currentText) return ExternalFileDecision.Ignore;
+        if (NormalizeLineEndings(diskText) == NormalizeLineEndings(currentText))
+        {
+            return ExternalFileDecision.Ignore;
+        }
         return dirty ? ExternalFileDecision.Conflict : ExternalFileDecision.Reload;
     }
 }
@@ -124,7 +130,11 @@ public sealed class FileChangeMonitor : IDisposable
             }
             else
             {
-                if (text == _diskText) return;
+                if (_diskText != null &&
+                    ExternalFileChange.NormalizeLineEndings(text) == ExternalFileChange.NormalizeLineEndings(_diskText))
+                {
+                    return;
+                }
                 _diskText = text;
                 kind = FileChangeKind.Modified;
             }
