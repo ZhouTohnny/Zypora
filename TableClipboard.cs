@@ -125,7 +125,7 @@ public static class TableClipboard
         if (string.IsNullOrEmpty(text)) return false;
 
         bool ok = false;
-        for (int attempt = 0; attempt < 5; attempt++)
+        for (int attempt = 0; attempt < 8; attempt++)
         {
             try
             {

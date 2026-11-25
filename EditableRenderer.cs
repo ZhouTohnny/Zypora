@@ -472,18 +472,7 @@ public static class EditableRenderer
         for (int c = 0; c < widths.Length; c++)
         {
             var text = c < cells.Count ? cells[c] : "";
-            var tb = new TextBlock
-            {
-                TextWrapping = TextWrapping.Wrap,
-                TextAlignment = AlignToTextAlignment(model.Align[c]),
-                FontWeight = header ? FontWeights.Bold : FontWeights.Normal,
-                FontSize = 15,
-                Foreground = t.Text,
-            };
-            foreach (var inline in ParseInlines(text, preview: true, t))
-            {
-                tb.Inlines.Add(inline);
-            }
+            var cellText = BuildCellText(text, header, model.Align[c], t);
 
             var border = new Border
             {
@@ -492,12 +481,13 @@ public static class EditableRenderer
                 BorderBrush = header ? t.GridLineStrong : t.GridLine,
                 BorderThickness = header ? new Thickness(0, 0, 1, 2) : new Thickness(0, 0, 1, 1),
                 Padding = new Thickness(8, 4, 8, 4),
-                Child = tb,
+                Child = cellText,
             };
             var cellInfo = new TableCellInfo(model, rowIndex, c, text, border, tableCells);
             border.Tag = cellInfo;
             tableCells.Add(cellInfo);
-            border.ContextMenu = BuildCellMenu(model, rowIndex, text);
+            border.ContextMenu = BuildCellMenu(model, rowIndex, text, null);
+            cellText.ContextMenu = BuildCellMenu(model, rowIndex, text, cellText);
             ContextMenuService.SetShowOnDisabled(border, true);
             Grid.SetColumn(border, c);
             grid.Children.Add(border);
@@ -516,6 +506,40 @@ public static class EditableRenderer
         return rowBorder;
     }
 
+    private static RichTextBox BuildCellText(string text, bool header, ColumnAlign align, RenderTheme t)
+    {
+        var doc = new FlowDocument
+        {
+            PagePadding = new Thickness(0),
+            FontFamily = new FontFamily(Body),
+            FontSize = 15,
+            Foreground = t.Text,
+        };
+        var paragraph = new Paragraph { Margin = new Thickness(0), TextAlignment = AlignToTextAlignment(align) };
+        if (header) paragraph.FontWeight = FontWeights.Bold;
+        foreach (var inline in ParseInlines(text, preview: true, t))
+        {
+            paragraph.Inlines.Add(inline);
+        }
+        doc.Blocks.Add(paragraph);
+
+        return new RichTextBox
+        {
+            Document = doc,
+            IsReadOnly = true,
+            IsReadOnlyCaretVisible = false,
+            IsTabStop = false,
+            Focusable = true,
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Cursor = System.Windows.Input.Cursors.IBeam,
+        };
+    }
+
     public static TableCellInfo? HitTestTableCell(Visual root, Point point)
     {
         var hit = VisualTreeHelper.HitTest(root, point)?.VisualHit;
@@ -523,6 +547,19 @@ public static class EditableRenderer
         while (cur != null && cur != root)
         {
             if (cur is Border { Tag: TableCellInfo info }) return info;
+            cur = VisualTreeHelper.GetParent(cur) ?? LogicalTreeHelper.GetParent(cur);
+        }
+        return null;
+    }
+
+    /// <summary>命中单元格内的可选择文本控件(用于让文字选择优先于整格拖选)。</summary>
+    public static System.Windows.Controls.Primitives.TextBoxBase? HitTestCellText(Visual root, Point point)
+    {
+        var hit = VisualTreeHelper.HitTest(root, point)?.VisualHit;
+        DependencyObject? cur = hit;
+        while (cur != null && cur != root)
+        {
+            if (cur is System.Windows.Controls.Primitives.TextBoxBase tb) return tb;
             cur = VisualTreeHelper.GetParent(cur) ?? LogicalTreeHelper.GetParent(cur);
         }
         return null;
@@ -540,9 +577,18 @@ public static class EditableRenderer
         return null;
     }
 
-    private static ContextMenu BuildCellMenu(TableModel model, int rowIndex, string cellText)
+    private static ContextMenu BuildCellMenu(TableModel model, int rowIndex, string cellText, RichTextBox? cellControl)
     {
         var menu = new ContextMenu();
+
+        if (cellControl != null)
+        {
+            var copySelection = new MenuItem { Header = "复制选中文字" };
+            copySelection.Click += (_, _) =>
+                TableClipboard.CopyWithNotice(cellControl.Selection.Text.TrimEnd('\r', '\n'), "已复制选中文字");
+            menu.Items.Add(copySelection);
+            menu.Opened += (_, _) => copySelection.IsEnabled = !cellControl.Selection.IsEmpty;
+        }
 
         var copyCell = new MenuItem { Header = "复制单元格" };
         copyCell.Click += (_, _) => TableClipboard.CopyWithNotice(TableClipboard.CellText(cellText), "已复制单元格");

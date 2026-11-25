@@ -157,6 +157,7 @@ public partial class MainWindow : Window
         _renderQueued = false;
         ClearTableSelection();
         EndTableDrag();
+        TableCellCopyPopup.IsOpen = false;
         _suppressChanged = true;
         Editor.Document = doc;
         _suppressChanged = false;
@@ -1234,6 +1235,7 @@ public partial class MainWindow : Window
             return;
         }
         TableClipboard.Copied -= _onTableCopied;
+        TableCellCopyPopup.IsOpen = false;
         DetachFileMonitor();
         base.OnClosing(e);
     }
@@ -1242,7 +1244,18 @@ public partial class MainWindow : Window
 
     private void OnEditorPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        var cell = EditableRenderer.HitTestTableCell(Editor, e.GetPosition(Editor));
+        TableCellCopyPopup.IsOpen = false;
+        var pt = e.GetPosition(Editor);
+
+        // 点在单元格文字上:交给单元格内的只读文本控件做字符级选择
+        if (EditableRenderer.HitTestCellText(Editor, pt) != null)
+        {
+            ClearTableSelection();
+            EndTableDrag();
+            return;
+        }
+
+        var cell = EditableRenderer.HitTestTableCell(Editor, pt);
         if (cell == null)
         {
             ClearTableSelection();
@@ -1268,6 +1281,47 @@ public partial class MainWindow : Window
     private void OnEditorPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         EndTableDrag();
+
+        // 在表格单元格内拖选了文字后,在鼠标位置弹出「复制」按钮
+        if (Keyboard.FocusedElement is System.Windows.Controls.RichTextBox cellRtb && IsTableCellText(cellRtb) && !cellRtb.Selection.IsEmpty)
+        {
+            ShowTableCellCopyPopup(cellRtb);
+        }
+        else
+        {
+            TableCellCopyPopup.IsOpen = false;
+        }
+    }
+
+    internal static bool IsTableCellText(DependencyObject? node)
+    {
+        while (node != null)
+        {
+            if (node is System.Windows.Controls.Border { Tag: TableCellInfo }) return true;
+            node = LogicalTreeHelper.GetParent(node);
+        }
+        return false;
+    }
+
+    private System.Windows.Controls.RichTextBox? _copyPopupSource;
+
+    private void ShowTableCellCopyPopup(System.Windows.Controls.RichTextBox source)
+    {
+        _copyPopupSource = source;
+        TableCellCopyPopup.PlacementTarget = Editor;
+        TableCellCopyPopup.IsOpen = false;
+        TableCellCopyPopup.IsOpen = true;
+    }
+
+    private void OnCopySelectedTableCellText(object sender, RoutedEventArgs e)
+    {
+        TableCellCopyPopup.IsOpen = false;
+        var source = _copyPopupSource;
+        if (source == null) return;
+
+        var text = source.Selection.Text.TrimEnd('\r', '\n');
+        TableClipboard.CopyWithNotice(text, "已复制选中文字");
+        source.Focus();
     }
 
     /// <summary>开始表格拖选(锚点保持,直到鼠标抬起)。</summary>
@@ -1289,7 +1343,16 @@ public partial class MainWindow : Window
 
     private void OnEditorPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        TableCellCopyPopup.IsOpen = false;
         var pt = e.GetPosition(Editor);
+        if (EditableRenderer.HitTestCellText(Editor, pt) != null)
+        {
+            // 单元格文字上右键:保留控件自己的文字菜单(复制选中文字)
+            ClearTableSelection();
+            EndTableDrag();
+            return;
+        }
+
         var cell = EditableRenderer.HitTestTableCell(Editor, pt);
         if (cell != null)
         {
@@ -1323,6 +1386,12 @@ public partial class MainWindow : Window
     private void OnEditorContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
     {
         var pt = Mouse.GetPosition(Editor);
+        if (EditableRenderer.HitTestCellText(Editor, pt) is { ContextMenu: { } textMenu })
+        {
+            StyleContextMenu(textMenu);
+            return;
+        }
+
         var target = EditableRenderer.HitTestTableMenuTarget(Editor, pt);
         if (target?.ContextMenu is { } menu)
         {
@@ -1331,7 +1400,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OpenTableContextMenu(System.Windows.Controls.ContextMenu menu)
+    private void StyleContextMenu(System.Windows.Controls.ContextMenu menu)
     {
         foreach (var key in Resources.Keys)
         {
@@ -1348,6 +1417,11 @@ public partial class MainWindow : Window
                 item.Style = miStyle;
             }
         }
+    }
+
+    private void OpenTableContextMenu(System.Windows.Controls.ContextMenu menu)
+    {
+        StyleContextMenu(menu);
         menu.PlacementTarget = Editor;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
         menu.IsOpen = true;
@@ -1736,6 +1810,13 @@ public partial class MainWindow : Window
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
 
+        if (e.Key == Key.Escape && TableCellCopyPopup.IsOpen)
+        {
+            TableCellCopyPopup.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
+
         // 预览/阅读模式下已点击选中表格单元格时,Ctrl+C 直接复制单元格/选中区域
         if (ctrl && !shift && (e.Key == Key.C || e.Key == Key.Insert) && TryCopySelectedTableCells())
         {
@@ -1755,6 +1836,25 @@ public partial class MainWindow : Window
             if (ctrl && e.Key is not (Key.C or Key.A or Key.Insert))
             {
                 e.Handled = true;
+                return;
+            }
+            base.OnPreviewKeyDown(e);
+            return;
+        }
+
+        // 焦点在表格单元格文字里:只放行复制/全选/保存/查找/文件操作,避免格式快捷键改到正文
+        if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase focusedCell && IsTableCellText(focusedCell))
+        {
+            if (e.Key == Key.Escape)
+            {
+                TableCellCopyPopup.IsOpen = false;
+                Editor.Focus();
+                e.Handled = true;
+                return;
+            }
+            if (ctrl && e.Key is Key.C or Key.Insert or Key.A or Key.S or Key.F or Key.H or Key.O or Key.N or Key.Z or Key.Y)
+            {
+                base.OnPreviewKeyDown(e);
                 return;
             }
             base.OnPreviewKeyDown(e);

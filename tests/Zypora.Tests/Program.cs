@@ -220,9 +220,25 @@ internal static class RendererTests
 
     private static List<string> GridTexts(WpfUIC c)
     {
-        var blocks = new List<TextBlock>();
-        Walk(c.Child, blocks);
-        return blocks.Select(tb => new WpfRange(tb.ContentStart, tb.ContentEnd).Text).ToList();
+        var result = new List<string>();
+        void WalkText(object o)
+        {
+            if (o is RichTextBox rtb)
+            {
+                result.Add(new WpfRange(rtb.Document.ContentStart, rtb.Document.ContentEnd).Text.TrimEnd('\r', '\n'));
+                return;
+            }
+            if (o is TextBlock tb)
+            {
+                result.Add(new WpfRange(tb.ContentStart, tb.ContentEnd).Text);
+                return;
+            }
+            if (o is DependencyObject d)
+                foreach (var child in LogicalTreeHelper.GetChildren(d))
+                    WalkText(child);
+        }
+        WalkText(c.Child);
+        return result;
     }
 
     private static string Identity(string src)
@@ -260,12 +276,12 @@ internal static class RendererTests
 
         var src2 = "| L | C | R |\r\n|:--|:-:|--:|\r\n| 1 | 2 | 3 |";
         var cs2 = Containers(EditableRenderer.BuildPreview(src2));
-        var header = new List<TextBlock>();
-        Walk(cs2[0].Child, header);
-        T.Eq("align left", TextAlignment.Left, header[0].TextAlignment);
-        T.Eq("align center", TextAlignment.Center, header[1].TextAlignment);
-        T.Eq("align right", TextAlignment.Right, header[2].TextAlignment);
-        T.Ok("header bold", header.All(tb => tb.FontWeight == FontWeights.Bold));
+        var header = Collect<RichTextBox>(cs2[0].Child);
+        WpfParagraph HeaderPara(RichTextBox r) => (WpfParagraph)r.Document.Blocks.FirstBlock!;
+        T.Eq("align left", TextAlignment.Left, HeaderPara(header[0]).TextAlignment);
+        T.Eq("align center", TextAlignment.Center, HeaderPara(header[1]).TextAlignment);
+        T.Eq("align right", TextAlignment.Right, HeaderPara(header[2]).TextAlignment);
+        T.Ok("header bold", header.All(r => HeaderPara(r).FontWeight == FontWeights.Bold));
 
         var src3 = "|a|b|\r\n|-|-|\r\n|1|2|";
         T.Eq("compact table no containers", 0, Containers(EditableRenderer.BuildPreview(src3)).Count);
@@ -1248,6 +1264,13 @@ internal static class WindowTests
         var welcomeRow = (Border)welcomeTablePara.Inlines.OfType<WpfUIC>().First(i => i.Child is Border).Child!;
         var welcomeCell0 = (Border)((Grid)welcomeRow.Child).Children[0];
         var cellInfo0 = (TableCellInfo)welcomeCell0.Tag;
+        var copyPopup = w.FindName("TableCellCopyPopup") as System.Windows.Controls.Primitives.Popup;
+        T.Ok("table copy popup exists", copyPopup != null);
+        T.Ok("table copy button exists", w.FindName("TableCellCopyButton") is Button);
+        var isCellText = typeof(MainWindow).GetMethod("IsTableCellText",
+            BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!;
+        T.Ok("cell text control detected", (bool)isCellText.Invoke(null, new object[] { welcomeCell0.Child })!);
+        T.Ok("editor is not cell text", !(bool)isCellText.Invoke(null, new object[] { editor })!);
         Call(w, "SelectTableCellRange", cellInfo0, cellInfo0);
         T.Eq("selected single table cell text", "功能",
             typeof(MainWindow).GetProperty("SelectedTableText", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(w) as string);
@@ -1386,11 +1409,25 @@ internal static class TableClipboardTests
         var cellVisual = (System.Windows.Controls.Border)((System.Windows.Controls.Grid)rowVisual.Child).Children[0];
         T.Ok("cell hit-test background", cellVisual.Background != null);
         T.Ok("cell tag has TableCellInfo", cellVisual.Tag is TableCellInfo { RowIndex: 0, ColumnIndex: 0 });
+        T.Ok("cell text is selectable control", cellVisual.Child is System.Windows.Controls.Primitives.TextBoxBase);
+        var cellRtb = cellVisual.Child as RichTextBox;
+        T.Ok("cell text is read-only", cellRtb?.IsReadOnly == true);
+        var cellRange = new WpfRange(cellRtb!.Document.ContentStart, cellRtb.Document.ContentEnd);
+        T.Eq("cell text content", "A", cellRange.Text.Trim());
+        cellRtb.Selection.Select(cellRtb.Document.ContentStart, cellRtb.Document.ContentEnd);
+        T.Ok("cell copy available with text selection",
+            System.Windows.Input.ApplicationCommands.Copy.CanExecute(null, cellRtb));
+        cellRtb.Selection.Select(cellRtb.Document.ContentStart, cellRtb.Document.ContentStart);
+        T.Ok("cell copy disabled without selection",
+            !System.Windows.Input.ApplicationCommands.Copy.CanExecute(null, cellRtb));
         T.Ok("cell menu exists", cellVisual.ContextMenu != null);
         T.Eq("cell menu count", 3, cellVisual.ContextMenu!.Items.Count);
         T.Eq("cell menu first", "复制单元格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[0]).Header);
         T.Eq("cell menu second", "复制整行", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[1]).Header);
         T.Eq("cell menu third", "复制整个表格", ((System.Windows.Controls.MenuItem)cellVisual.ContextMenu.Items[2]).Header);
+        T.Ok("cell text menu exists", cellRtb.ContextMenu != null);
+        T.Eq("cell text menu count", 4, cellRtb.ContextMenu!.Items.Count);
+        T.Eq("cell text menu first", "复制选中文字", ((System.Windows.Controls.MenuItem)cellRtb.ContextMenu.Items[0]).Header);
     }
 }
 
